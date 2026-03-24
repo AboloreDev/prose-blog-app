@@ -50,6 +50,8 @@ type PostRepository interface {
 	GetUserPostDrafts(userId int, filter Filter) ([]PostDetails, MetaData, error)
 	GetUserScheduledPosts(userId int, filter Filter) ([]PostDetails, MetaData, error)
 	PublishPost(postID int) error
+	IncrementViewCount(postId int) error
+	GetScheduledPosts() ([]PostDetails, error)
 }
 
 type SQLPostRepository struct{
@@ -535,4 +537,53 @@ func(r *SQLPostRepository) PublishPost(postID int) error {
 	}
 
 	return nil
+}
+
+func (r *SQLPostRepository) IncrementViewCount(postId int) error{
+	queryStatement := `
+		UPDATE posts SET view_count = view_count + 1, WHERE id = ?
+	`
+	_, err := r.db.Exec(queryStatement, postId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
+    statement := `
+        SELECT id, user_id, title, publish_at
+        FROM posts
+        WHERE status = 'scheduled'
+        AND publish_at > CURRENT_TIMESTAMP
+    `
+
+    rows, err := r.db.Query(statement)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var scheduledPosts []PostDetails
+    for rows.Next() {
+        var post PostDetails
+        err := rows.Scan(
+            &post.ID,
+            &post.UserID,
+            &post.Title,
+            &post.PublishAt,
+        )
+        if err != nil {
+            return nil, err
+        }
+        scheduledPosts = append(scheduledPosts, post)
+    }
+
+    err = rows.Err()
+    if err != nil {
+        return nil, err
+    }
+
+    return scheduledPosts, nil
 }

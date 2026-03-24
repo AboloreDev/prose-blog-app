@@ -25,6 +25,7 @@ type PostDetails struct {
 	Author string `json:"author"`
 	CommunityName string `json:"community_name"`
 	CommentCount int `json:"comment_count"`
+	PublishAt time.Time `json:"publish_at"`
 	VotesCount int `json:"votes_count"`
 	Status string `json:"status"`
 	ViewCount int `json:"view_count"`

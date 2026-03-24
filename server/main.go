@@ -13,6 +13,7 @@ import (
 	"prose-blog/posts"
 	ratelimit "prose-blog/rate-limit"
 	"prose-blog/users"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,7 +28,9 @@ type Application struct {
 	authRepo auth.AuthRepository
 	postRepo posts.PostRepository
 	stopChan chan struct{}
-	server *http.Server
+	server 	 *http.Server
+	scheduleList map[int]chan struct{}
+	schedulerMutex sync.Mutex
 }
 
 func main() {
@@ -47,7 +50,14 @@ func main() {
 		authRepo: auth.NewSQLAuthRepository(db),
 		stopChan: make(chan struct{}),
 		postRepo: posts.NewSQLPostRepository(db),
+		scheduleList: make(map[int]chan struct{}),
 	}
+	
+	err = app.RestoreScheduledPosts()
+	if err != nil {
+		app.errorLog.Printf("failed to restore scheduled posts: %v", err)
+	}
+
 
 	// Clean up expired refresh tokens in the db
 	app.StartTokenCleanUp()
