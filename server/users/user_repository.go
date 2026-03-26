@@ -29,7 +29,6 @@ func NewSQLUserRepository(db *sql.DB) UserRepository {
 	return &SQLUserRepository{db: db}
 }
 
-// Create a user 
 func (r *SQLUserRepository) CreateUser(username, email, password, bio string, karma int) (int, error) {
 	ctx := context.Background()
 
@@ -39,39 +38,22 @@ func (r *SQLUserRepository) CreateUser(username, email, password, bio string, ka
 	}
 	defer tx.Rollback()
 
-	// Statement
-	queryStatement := `INSERT INTO users (username, email, password) VALUES (?, ?, ?)`
-	userStmt, err := tx.PrepareContext(ctx, queryStatement)
-	if err != nil {
-		return 0, err
-	}
-	defer userStmt.Close()
-
-	// hash the password
 	pw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return 0, err
 	}
-	// Execute statement
-	result, err := userStmt.Exec(username, email, string(pw))
-	if err != nil {
-		return 0, err
-	}
+
+	queryStatement := `INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id`
+	var userId int
+	row := tx.QueryRowContext(ctx, queryStatement, username, email, pw)
 	
-	userId, err := result.LastInsertId()
-	if err != nil {
-		return  0, err
-	}
-
-	// profile statement
-	profileStatement := `INSERT INTO profile (user_id, bio, karma) VALUES (?, ?, ?)`
-	profileStmt, err := tx.PrepareContext(ctx, profileStatement)
+	err = row.Scan(&userId)
 	if err != nil {
 		return 0, err
 	}
-	defer profileStmt.Close()
 
-	_, err = profileStmt.Exec(userId, bio, karma)
+	profileStatement := `INSERT INTO profiles (user_id, bio, karma) VALUES ($1, $2, $3)`
+	_, err = tx.ExecContext(ctx, profileStatement, userId, bio, karma)
 	if err != nil {
 		return 0, err
 	}
@@ -81,31 +63,34 @@ func (r *SQLUserRepository) CreateUser(username, email, password, bio string, ka
 		return 0, err
 	}
 
-	return int(userId), nil
+	return userId, nil
 }
 
-// Get a user by id
 func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
-	// Perpare statement
 	queryStatement := `SELECT 
 	u.id, u.username, u.email, u.password, u.created_at, p.bio, p.karma
-	FROM users AS u INNER JOIN profile AS p ON u.id = p.user_id
-	WHERE u.id = ?
+	FROM users AS u INNER JOIN profiles AS p ON u.id = p.user_id
+	WHERE u.id = $1
 	`
 	rows := r.db.QueryRow(queryStatement, id)
+
 	var user User
-	err :=  rows.Scan(&user.ID, user.Username, user.Email, user.Password, user.CreatedAt, user.Profile.Bio, user.Profile.Karma)
+	err :=  rows.Scan(
+		&user.ID, &user.Username, &user.Email, 
+		&user.Password, &user.CreatedAt, 
+		&user.Profile.Bio, &user.Profile.Karma,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	user.Profile.UserId = user.ID
 
-	return  &user, nil
+	return &user, nil
 }
 
-// Get all users 
+
 func (r *SQLUserRepository) GetAllUsers() ([]User, error) {
-	// statement
 	queryStatement := `SELECT id, username, email, created_at FROM users`
 
 	rows, err := r.db.Query(queryStatement)
@@ -131,18 +116,19 @@ func (r *SQLUserRepository) GetAllUsers() ([]User, error) {
 	return  users, nil
 }
 
-// Get user by email
+
 func (r *SQLUserRepository) GetUserByEmail(email string) (*User, error) {
-	// statement
 	queryStatement := `SELECT
 	u.id, u.username, u.email, u.password, u.created_at, p.bio, p.karma
-	FROM users AS u INNER JOIN profile AS p 
-	ON u.id = p.user_id WHERE u.email = ?`
+	FROM users AS u INNER JOIN profiles AS p 
+	ON u.id = p.user_id WHERE u.email = $1`
 
 	rows := r.db.QueryRow(queryStatement, email)
 	var user User 
 	err := rows.Scan(
-		&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt, &user.Profile.Bio, &user.Profile.Karma,
+		&user.ID, &user.Username, &user.Email, 
+		&user.Password, &user.CreatedAt, 
+		&user.Profile.Bio, &user.Profile.Karma,
 	)
 
 	if err != nil {
@@ -156,7 +142,6 @@ func (r *SQLUserRepository) GetUserByEmail(email string) (*User, error) {
 	return &user, nil
 }
 
-// Authenticate 
 func (r *SQLUserRepository) Authenticate(email, password string) (int, error) {
 	user, err := r.GetUserByEmail(email)
 	if err != nil {
@@ -174,7 +159,6 @@ func (r *SQLUserRepository) Authenticate(email, password string) (int, error) {
 	return user.ID, nil
 }
 
-// Update user 
 func (r *SQLUserRepository) UpdateUser(user *User) error {
 	ctx := context.Background()
 
@@ -182,12 +166,11 @@ func (r *SQLUserRepository) UpdateUser(user *User) error {
 	if err != nil {
 		return  err
 	}
-	tx.Rollback()
+	defer tx.Rollback()
 
-	// statement
 	queryStatement := `
-		UPDATE users SET username = ?, email = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
+		UPDATE users SET username = $1, email = $2
+		WHERE id = $3
 		`
 	stmt, err := tx.PrepareContext(ctx, queryStatement)
 	if err != nil {
@@ -200,10 +183,9 @@ func (r *SQLUserRepository) UpdateUser(user *User) error {
 		return  err
 	}
 
-	// Profile statement
 	profileStatement := `
-	UPDATE profile SET bio = ?, updated_at = CURRENT_TIMESTAMP
-	WHERE user_id = ?
+		UPDATE profiles SET bio = $1, updated_at = NOW()
+		WHERE user_id = $2
 	`
 	profileStmt, err := tx.PrepareContext(ctx, profileStatement)
 	if err != nil {
@@ -224,10 +206,9 @@ func (r *SQLUserRepository) UpdateUser(user *User) error {
 	return nil
 }
 
-// Delete a user
+
 func (r *SQLUserRepository) DeleteUser(id int) error {
-	// statement 
-	deleteStatement := `DELETE FROM users WHERE id = ?`
+	deleteStatement := `DELETE FROM users WHERE id = $1`
 
 	rows, err := r.db.Exec(deleteStatement, id)
 	if err != nil {

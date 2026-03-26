@@ -3,6 +3,7 @@ package posts
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 )
@@ -67,20 +68,17 @@ func NewSQLPostRepository(db *sql.DB) PostRepository {
 func (r *SQLPostRepository) CreatePost(userId int, title string, body string, communityId int, status string) (int, error) {
 	statement := `
 		INSERT INTO posts (user_id, title, body, community_id, status) 
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id
 	`
+	var postId int
+	row := r.db.QueryRow(statement, userId, title, body, communityId, status)
 
-	result, err := r.db.Exec(statement, userId, title, body, communityId, status)
+	err := row.Scan(&postId)
 	if err != nil {
 		return 0, err
 	}
 
-	postId, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	return int(postId), nil
+	return postId, nil
 }
 
 func (r *SQLPostRepository) GetPostById(id int) (*PostDetails, error) {
@@ -96,8 +94,8 @@ func (r *SQLPostRepository) GetPostById(id int) (*PostDetails, error) {
 		INNER JOIN communities AS c ON p.community_id = c.id
 		LEFT JOIN votes AS v ON p.id = v.post_id
 		LEFT JOIN comments AS cm ON p.id = cm.post_id
-		WHERE p.id = ?
-		GROUP BY p.id
+		WHERE p.id = $1
+		GROUP BY p.id, u.username, c.name
 	`
 	rows := r.db.QueryRow(queryStatement, id)
 
@@ -135,8 +133,8 @@ func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, 
 
 	queryStatement := `
 	SELECT COUNT(*) OVER() AS total_records,
-	p.id, p.user_id, p.title, p.body, p.created_at, p.view_count
-	u.username AS author, com.name AS community_name
+	p.id, p.user_id, p.title, p.body, p.created_at, p.view_count,
+	u.username AS author, com.name AS community_name,
 	COUNT(DISTINCT v.user_id) AS vote_count,
 	COUNT(DISTINCT c.id) AS comment_count
 	FROM posts AS p
@@ -148,24 +146,25 @@ func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, 
 	`
 
 	var args []interface{}
+	argPos := 1
 
-	if filter.Query != ""{
-		queryStatement += " AND LOWER(p.title) LIKE ?"
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(p.title) LIKE $%d", argPos)
 		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
 	}
 
-	queryStatement += " GROUP BY p.id"
+	queryStatement += " GROUP BY p.id, u.username, com.name"
 
 	if filter.OrderBy == "popular" {
 		queryStatement += " ORDER BY vote_count DESC, p.created_at DESC"
-	}else {
-		queryStatement+= " ORDER BY p.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY p.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
@@ -218,30 +217,29 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
 		INNER JOIN communities AS cm ON p.community_id = cm.id
 		LEFT JOIN votes AS v ON p.id = v.post_id
 		LEFT JOIN comments AS c ON p.id = c.post_id
-		WHERE cm.id = ? AND p.status = 'published'
+		WHERE cm.id = $1 AND p.status = 'published'
 	`
 
 	var args []interface{}
+	argPos := 2
 
-	args = append(args, communityId)
-
-	if filter.Query != ""{
-		queryStatement += " AND LOWER(p.title) LIKE ?"
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(p.title) LIKE $%d", argPos)
 		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
 	}
 
-	queryStatement += " GROUP BY p.id"
+	queryStatement += " GROUP BY p.id, u.username, cm.name"
 
 	if filter.OrderBy == "popular" {
 		queryStatement += " ORDER BY vote_count DESC, p.created_at DESC"
-	}else {
-		queryStatement+= " ORDER BY p.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY p.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
@@ -285,7 +283,7 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
 		p.id, p.user_id, p.community_id, p.title, p.body, p.view_count,
-		p.created_at, u.username AS author, cm.name AS community_name
+		p.created_at, u.username AS author, cm.name AS community_name,
 		COUNT(DISTINCT v.user_id) AS votes_count,
 		COUNT(DISTINCT c.id) AS comments_count
 		FROM posts p 
@@ -293,29 +291,29 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 		INNER JOIN communities AS cm ON p.community_id = cm.id
 		LEFT JOIN votes AS v ON p.id = v.post_id
 		LEFT JOIN comments AS c ON p.id = c.post_id
-		WHERE u.id = ? AND p.status = 'published'
+		WHERE u.id = $1 AND p.status = 'published'
 	`
 
 	var args []interface{}
-	args = append(args, userId)
+	argPos := 2
 
-	if filter.Query != ""{
-		queryStatement += " AND LOWER(p.title) LIKE ?"
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(p.title) LIKE $%d", argPos)
 		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
 	}
 
-	queryStatement += " GROUP BY p.id"
+	queryStatement += " GROUP BY p.id, u.username, cm.name"
 
 	if filter.OrderBy == "popular" {
 		queryStatement += " ORDER BY vote_count DESC, p.created_at DESC"
-	}else {
-		queryStatement+= " ORDER BY p.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY p.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
@@ -354,7 +352,7 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 }
 
 func (r *SQLPostRepository) DeletePost(id int) error {
-    statement := `DELETE FROM posts WHERE id = ?`
+    statement := `DELETE FROM posts WHERE id = $1`
 
     result, err := r.db.Exec(statement, id)
     if err != nil {
@@ -375,7 +373,8 @@ func (r *SQLPostRepository) DeletePost(id int) error {
 
 func (r *SQLPostRepository) UpdatePost(post *Post) error {
 	queryStatement := `
-		UPDATE posts SET title = ?, body = ? WHERE id = ?, updated_at = CURRENT_TIMESTAMP 
+		UPDATE posts SET title = $1, body = $2, updated_at = NOW() 
+		WHERE id = $3
 	`
 
 	_, err := r.db.Exec(queryStatement, post.Title, post.Body, post.ID)
@@ -399,32 +398,35 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 		FROM posts AS p
 		INNER JOIN users AS u ON p.user_id = u.id
 		INNER JOIN communities AS cm ON p.community_id = cm.id
-		WHERE p.user_id = ? AND p.status = 'draft'
+		WHERE p.user_id = $1 AND p.status = 'draft'
 	`
 
 	var args []interface{}
-	args = append(args, userId)
+	argPos := 2
 
-	if filter.Query != ""{
-		queryStatement += " AND LOWER(p.title) LIKE ?"
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(p.title) LIKE $%d", argPos)
 		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
 	}
 
-	queryStatement += " GROUP BY p.id"
+	queryStatement += " GROUP BY p.id, u.username, cm.name"
 
 	if filter.OrderBy == "popular" {
-		queryStatement += "ORDER BY p.created_at DESC"
+		queryStatement += " ORDER BY vote_count DESC, p.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY p.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
 		return nil, MetaData{}, err
 	}
+	defer rows.Close()
 
 	var totalRecords int
 	var posts []PostDetails
@@ -468,32 +470,35 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 		FROM posts AS p
 		INNER JOIN users AS u ON p.user_id = u.id
 		INNER JOIN communities AS cm ON p.community_id = cm.id
-		WHERE p.user_id = ? AND p.status = 'scheduled'
+		WHERE p.user_id = $1 AND p.status = 'scheduled'
 	`
 
 	var args []interface{}
-	args = append(args, userId)
+	argPos := 2
 
-	if filter.Query != ""{
-		queryStatement += " AND LOWER(p.title) LIKE ?"
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(p.title) LIKE $%d", argPos)
 		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
 	}
 
-	queryStatement += " GROUP BY p.id"
+	queryStatement += " GROUP BY p.id, u.username, cm.name"
 
 	if filter.OrderBy == "popular" {
+		queryStatement += " ORDER BY vote_count DESC, p.created_at DESC"
+	} else {
 		queryStatement += " ORDER BY p.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
 		return nil, MetaData{}, err
 	}
+	defer rows.Close()
 
 	var totalRecords int
 	var posts []PostDetails
@@ -527,8 +532,8 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 
 func(r *SQLPostRepository) PublishPost(postID int) error {
 	queryStatement := `
-		UPDATE post SET status = 'published', updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
+		UPDATE posts SET status = 'published', updated_at = NOW()
+		WHERE id = $1
 	`
 
 	_, err := r.db.Exec(queryStatement, postID)
@@ -541,7 +546,8 @@ func(r *SQLPostRepository) PublishPost(postID int) error {
 
 func (r *SQLPostRepository) IncrementViewCount(postId int) error{
 	queryStatement := `
-		UPDATE posts SET view_count = view_count + 1, WHERE id = ?
+		UPDATE posts SET view_count = view_count + 1
+		WHERE id = $1
 	`
 	_, err := r.db.Exec(queryStatement, postId)
 	if err != nil {
@@ -556,7 +562,7 @@ func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
         SELECT id, user_id, title, publish_at
         FROM posts
         WHERE status = 'scheduled'
-        AND publish_at > CURRENT_TIMESTAMP
+        AND publish_at > NOW()
     `
 
     rows, err := r.db.Query(statement)

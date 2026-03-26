@@ -116,7 +116,7 @@ func (app *Application) Homepage(w http.ResponseWriter, r *http.Request) {
 	}
 	app.infoLog.Printf("\nMetadata: %+v\n", metadata)
 	
-	next, prev := helpers.BuildPaginationURLs(filter, metadata)
+	next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
 
 	helpers.WriteJSON(w, http.StatusOK, &FetchedPostData{
 		Posts: allPosts,
@@ -182,7 +182,7 @@ func (app *Application) DeletePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Request) {
-	communityId, err := strconv.Atoi(r.PathValue("community_id"))
+	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
@@ -203,7 +203,7 @@ func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Reques
 
 	app.infoLog.Printf("\nMetadata: %+v\n", metadata)
 	
-	next, prev := helpers.BuildPaginationURLs(filter, metadata)
+	next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
 
 	helpers.WriteJSON(w, http.StatusOK, &FetchedCommunityPostData{
 		CommunityPosts: allCommunityPosts,
@@ -231,7 +231,7 @@ func (app *Application) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 
 	app.infoLog.Printf("\nMetadata: %+v\n", metadata)
 	
-	next, prev := helpers.BuildPaginationURLs(filter, metadata)
+	next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
 
 	helpers.WriteJSON(w, http.StatusOK, &FetchedUserPostData{
 		UserPosts: allUserPosts,
@@ -242,9 +242,22 @@ func (app *Application) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
+	userId := r.Context().Value(middleware.UserID).(int)
+
 	postId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
-		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
+		http.Error(w, "Invalid Post Id", http.StatusBadRequest)
+		return
+	}
+
+	post, err := app.postRepo.GetPostById(postId)
+	if err != nil {
+		http.Error(w, "Post Not Found", http.StatusNotFound)
+		return
+	}
+
+	if post.UserID != userId {
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -283,7 +296,7 @@ func (app *Application) GetUserPostsDraft(w http.ResponseWriter, r *http.Request
 
 	app.infoLog.Printf("\nMetadata: %+v\n", metadata)
 	
-	next, prev := helpers.BuildPaginationURLs(filter, metadata)
+	next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
 
 	helpers.WriteJSON(w, http.StatusOK, &FetchedUserPostData{
 		UserPosts: allUserPosts,
@@ -310,7 +323,7 @@ func (app *Application) GetUserScheduledPosts(w http.ResponseWriter, r *http.Req
 
 	app.infoLog.Printf("\nMetadata: %+v\n", metadata)
 	
-	next, prev := helpers.BuildPaginationURLs(filter, metadata)
+	next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
 
 	helpers.WriteJSON(w, http.StatusOK, &FetchedUserPostData{
 		UserPosts: allUserScheduledPosts,

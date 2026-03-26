@@ -1,0 +1,105 @@
+package main
+
+import (
+	"net/http"
+	"prose-blog/helpers"
+	"prose-blog/middleware"
+	"prose-blog/users"
+	"strconv"
+)
+
+type UpdateUserRequest struct {
+	Username string  `json:"username"`
+	Email string	 `json:"email"`
+	Profile users.Profile `json:"profile"`
+}
+
+type UpdateUserResponse struct {
+	Message string  `json:"message"`
+	Username string  `json:"username"`
+	Email string	 `json:"email"`
+	Profile users.Profile `json:"profile"`
+}
+
+type DeleteUserResponse struct {
+	Message string  `json:"message"`
+}
+
+type UserDetails struct {
+	ID int `json:"id"`
+	Username string  `json:"username"`
+	Email string	 `json:"email"`
+	Profile users.Profile `json:"profile"`
+}
+
+func (app *Application) GetAllUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := app.userRepo.GetAllUsers()
+	if err != nil {
+		http.Error(w, "Internal Server Error",http.StatusInternalServerError)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, users)
+}
+
+func (app *Application) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	userId := r.Context().Value(middleware.UserID).(int)
+
+	var update UpdateUserRequest
+	err := helpers.ReadJSON(r, &update)
+	if err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	err = app.userRepo.UpdateUser(&users.User{ID: userId, Username: update.Username, Email: update.Email, Profile: users.Profile{Bio: update.Profile.Bio}})
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, UpdateUserResponse{
+		Message: "User updated successfully",
+		Username: update.Username,
+		Email: update.Email,
+		Profile: update.Profile,
+	})
+}
+
+
+func (app *Application) GetUserById(w http.ResponseWriter, r *http.Request) {
+	userId, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "Invalid User Id", http.StatusNotFound)
+		return
+	}
+
+	user, err := app.userRepo.GetUserById(userId)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, UserDetails{
+		ID: user.ID,
+		Username: user.Username,
+		Email: user.Email,
+		Profile: user.Profile,
+	})
+}
+
+func (app *Application) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	userId := r.Context().Value(middleware.UserID).(int)
+
+
+	err := app.userRepo.DeleteUser(userId)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, DeleteUserResponse{
+		Message: "User deleted successfully",
+		
+	})
+}

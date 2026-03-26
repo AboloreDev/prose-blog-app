@@ -28,10 +28,9 @@ func NewSQLAuthRepository(db *sql.DB) AuthRepository {
 }
 
 func (r *SQLAuthRepository) SaveRefreshToken(userId int, token string, expiresAt time.Time) error {
-	// Prepare statement
 	statement := `
 		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-		VALUES (?, ?, ?)	
+		VALUES ($1, $2, $3)	
 	`
 
 	stmt, err := r.db.Prepare(statement)
@@ -55,10 +54,9 @@ func (r *SQLAuthRepository) GetRefreshToken(token string) (*RefreshToken, error)
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
 
-	// statement
 	queryStatement := `
 	SELECT rt.id, rt.user_id, rt.expires_at FROM refresh_tokens AS rt
-	WHERE token_hash = ?
+	WHERE token_hash = $1
 	`	
 
 	rows := r.db.QueryRow(queryStatement, tokenHash)
@@ -80,7 +78,9 @@ func (r *SQLAuthRepository) DeleteRefreshToken(token string) error {
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
 
-	statement := `DELETE FROM refresh_tokens WHERE token_hash = ?`
+	statement := `
+		DELETE FROM refresh_tokens 
+		WHERE token_hash = $1`
 
 	rows, err := r.db.Exec(statement, tokenHash)
 	if err != nil {
@@ -100,7 +100,9 @@ func (r *SQLAuthRepository) DeleteRefreshToken(token string) error {
 }
 
 func (r *SQLAuthRepository) DeleteAllToken(userId int) error {
-	statement := `DELETE FROM refresh_tokens WHERE user_id = ?`
+	statement := `
+		DELETE FROM refresh_tokens 
+		WHERE user_id = $1`
 
 	rows, err := r.db.Exec(statement, userId)
 	if err != nil {
@@ -121,7 +123,9 @@ func (r *SQLAuthRepository) DeleteAllToken(userId int) error {
 
 
 func (r *SQLAuthRepository) DeleteExpiredTokens() error {
-	statement := `SELECT from refresh_tokens WHERE expires_at < CURRENT_TIMESTAMP`
+	statement := `
+		DELETE FROM refresh_tokens 
+		WHERE expires_at < NOW()`
 
 	_, err := r.db.Exec(statement)
 	if err != nil {

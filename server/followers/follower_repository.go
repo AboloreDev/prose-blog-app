@@ -40,7 +40,7 @@ func NewSQLFollowersRepository(db *sql.DB) FollowersRepository {
 
 func (r *SQLFollowersRepository) FollowUser(followerId, followingId int) error {
 	queryStatement := `
-		INSERT INTO followers (follower_id, following_id) VALUES (?, ?)
+		INSERT INTO followers (follower_id, following_id) VALUES ($1, $2)
 	`
 
 	_, err := r.db.Exec(queryStatement, followerId, followingId)
@@ -54,9 +54,9 @@ func (r *SQLFollowersRepository) FollowUser(followerId, followingId int) error {
 func (r *SQLFollowersRepository) UnfollowUser(followerId, followingId int) error {
 	queryStatement := `
 	DELETE FROM followers 
-	WHERE follower_id = ? AND following_id = ?`
+	WHERE follower_id = $1 AND following_id = $2`
 
-	_, err := r.db.Exec(queryStatement, followerId)
+	_, err := r.db.Exec(queryStatement, followerId, followingId)
 	if err != nil {
 		return err
 	}
@@ -71,8 +71,8 @@ func (r *SQLFollowersRepository) GetFollowers(followingId int) ([]Followers, err
 		FROM followers AS f
 		INNER JOIN users AS u ON f.follower_id = u.id
 		INNER JOIN profiles AS p ON f.follower_id = p.user_id
-		WHERE following_id = ?
-		ORDER BY f.created_at
+		WHERE following_id = $1
+		ORDER BY f.created_at, u.username
 	`
 
 	rows, err := r.db.Query(queryStatement, followingId)
@@ -109,8 +109,8 @@ func (r *SQLFollowersRepository) GetFollowing(followerId int) ([]Followers, erro
 		u.username AS following, p.karma AS following_karma
 		FROM followers AS f
 		INNER JOIN users AS u ON f.following_id = u.id
-		INNER JOIN profile AS p ON f.following_id = p.user_id
-		WHERE follower_id = ?
+		INNER JOIN profiles AS p ON f.following_id = p.user_id
+		WHERE follower_id = $1
 		ORDER BY f.created_at
 	`
 
@@ -145,7 +145,7 @@ func (r *SQLFollowersRepository) GetFollowing(followerId int) ([]Followers, erro
 func (r *SQLFollowersRepository) IsFollowing(followerID, followingID int) (bool, error) {
     statement := `
         SELECT COUNT(*) FROM followers
-        WHERE follower_id = ? AND following_id = ?
+        WHERE follower_id = $1 AND following_id = $2
     `
     var count int
     err := r.db.QueryRow(statement, followerID, followingID).Scan(&count)
@@ -159,9 +159,9 @@ func (r *SQLFollowersRepository) IsFollowing(followerID, followingID int) (bool,
 func (r *SQLFollowersRepository) GetFollowCount(userID int) (*FollowCount, error) {
     statement := `
         SELECT
-            (SELECT COUNT(*) FROM followers WHERE following_id = ?) AS follower_count,
-            (SELECT COUNT(*) FROM followers WHERE follower_id = ?)  AS following_count
-    `
+            (SELECT COUNT(*) FROM followers WHERE following_id = $1) AS follower_count,
+            (SELECT COUNT(*) FROM followers WHERE follower_id = $2)  AS following_count
+    	`
 
     var count FollowCount
     err := r.db.QueryRow(statement, userID, userID).Scan(

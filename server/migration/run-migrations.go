@@ -14,17 +14,7 @@ func NewMigrator(db *sql.DB) *Migrator {
 }
 
 func (r *Migrator) RunMigrations() error {
-	_, err := r.db.Exec("PRAGMA foreign_keys = ON")
-	if err != nil {
-		return fmt.Errorf("could not enable foreign keys: %w", err)
-	}
-
-	_, err = r.db.Exec("PRAGMA journal_mode=WAL")
-	if err != nil {
-		return fmt.Errorf("failed: %w", err)
-	}
-
-	err = r.CreateUsersTable()
+	err := r.CreateUsersTable()
 	if err != nil {
 		return err
 	}

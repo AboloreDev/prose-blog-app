@@ -15,6 +15,9 @@ type RegisterUser struct {
 }
 
 type AuthResponse struct {
+	Message string `json:"message"`
+	Username string  `json:"username"`
+	Email string `json:"email"`
 	AccessToken string `json:"access_token"`
 	UserID int `json:"user_id"`
 }
@@ -74,6 +77,9 @@ func (app *Application) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusCreated, AuthResponse{
 		AccessToken: accessToken,
 		UserID: userID,
+		Username: register.Username,
+		Email: register.Email,
+		Message: "User Created Successfully",
 	})
 }
 
@@ -91,7 +97,7 @@ func (app *Application) LoginUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		app.errorLog.Printf("User authentication failed %v", err)
 		http.Error(
-			w, "Internal Server Error", http.StatusInternalServerError, 
+			w, "Invalid Username or Password", http.StatusBadRequest, 
 		)
 		return
 	}
@@ -138,8 +144,11 @@ func (app *Application) LoginUser(w http.ResponseWriter, r *http.Request) {
 	})
 
 	helpers.WriteJSON(w, http.StatusOK, AuthResponse{
-		AccessToken: accessToken,
-		UserID: user.ID,
+	AccessToken: accessToken,
+		UserID: userID,
+		Username: user.Username,
+		Email: login.Email,
+		Message: "User Logged In Successfully",
 	})
 }
 
@@ -163,7 +172,9 @@ func (app *Application) LogoutUser(w http.ResponseWriter, r *http.Request) {
 		Path: "/",
 	})
 
-	helpers.WriteJSON(w, http.StatusOK, nil)
+	helpers.WriteJSON(w, http.StatusOK, AuthResponse{
+		Message: "User Logged Out Successfully",
+	})
 }
 
 func (app *Application) RefreshToken(w http.ResponseWriter, r *http.Request) {
@@ -185,11 +196,39 @@ func (app *Application) RefreshToken(w http.ResponseWriter, r *http.Request) {
     	return
 	}
 
+	newRefreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	accessToken, err := auth.GenerateAccessToken(refreshToken.UserId)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+
+	err = app.authRepo.DeleteRefreshToken(token.Value)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	err = app.authRepo.SaveRefreshToken(refreshToken.UserId, newRefreshToken, time.Now().Add(7 * 24 * time.Hour))
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+    Name:     "refresh_token",
+    Value:    newRefreshToken,
+    Expires:  time.Now().Add(7 * 24 * time.Hour),
+    HttpOnly: true,
+    Secure:   false,
+    Path:     "/",
+    SameSite: http.SameSiteLaxMode,
+	})
 
 	helpers.WriteJSON(w, http.StatusOK, AuthResponse{
 		AccessToken: accessToken,

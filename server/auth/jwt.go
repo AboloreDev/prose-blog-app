@@ -19,7 +19,6 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// Genenrate access Token
 func GenerateAccessToken(userId int) (string, error) {
 	claims := Claims{
 		UserID: userId,
@@ -34,7 +33,6 @@ func GenerateAccessToken(userId int) (string, error) {
 	return token.SignedString(jwtsecretKey)
 }
 
-// Validate Access Token 
 func ValidateAccessToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
@@ -59,7 +57,6 @@ func ValidateAccessToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-// Generate Refresh token
 func GenerateRefreshToken() (string, error) {
 	bytes := make([]byte, 32)
 	_, err := rand.Read(bytes)
@@ -67,6 +64,5 @@ func GenerateRefreshToken() (string, error) {
 		return "", err
 	}
 
-	// convert to hex string 
 	return hex.EncodeToString(bytes), nil
 }

@@ -3,6 +3,7 @@ package community
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 )
@@ -62,9 +63,13 @@ func calculateMetaData(totalRecords, page, pageSize int) MetaData {
 func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner string, createdBy int) (int, error) {
 	queryStatement := `
 		INSERT INTO communities (name, slug, description, banner, created_by) 
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id
 	`
-	result, err := r.db.Exec(queryStatement, name, slug, description, banner, createdBy)
+
+	var communityId int
+	row := r.db.QueryRow(queryStatement, name, slug, description, banner, createdBy)
+
+	err := row.Scan(&communityId)
 	if err != nil {
 		if strings.Contains(err.Error(), "communities.name") {
     	return 0, ErrDuplicateName
@@ -75,12 +80,7 @@ func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner
 		return 0, err
 	}
 
-	communityId, err := result.LastInsertId()
-	if err != nil {
-		return  0, err
-	}
-
-	return int(communityId), nil
+	return communityId, nil
 }
 
 func (r *SQLCommunityRepository) GetCommunityBySlug(communitySlug string) (*Community, error) {
@@ -89,7 +89,7 @@ func (r *SQLCommunityRepository) GetCommunityBySlug(communitySlug string) (*Comm
 		cm.created_by, cm.created_at, u.username AS community_creator
 		FROM communities AS cm
 		INNER JOIN users AS u ON cm.created_by = u.id
-		WHERE cm.slug = ?
+		WHERE cm.slug = $1
 	`
 
 	rows := r.db.QueryRow(queryStatement, communitySlug)
@@ -112,11 +112,11 @@ func (r *SQLCommunityRepository) GetCommunityBySlug(communitySlug string) (*Comm
 func (r *SQLCommunityRepository) GetCommunityById(communityId int) (*Community, error) {
 	queryStatement := `
 		SELECT cm.id, cm.name, cm.slug, cm.description, cm.banner, cm.member_count, 
-		cm.created_by, cm.created_at, u.username AS community_creator,
+		cm.created_by, cm.created_at, u.username AS community_creator
 		FROM communities AS cm
 		INNER JOIN users AS u ON cm.created_by = u.id
-		WHERE cm.id = ?
-		GROUP BY cm.id
+		WHERE cm.id = $1
+		GROUP BY cm.id, u.username
 		ORDER BY cm.created_at DESC
 	`
 
@@ -131,11 +131,6 @@ func (r *SQLCommunityRepository) GetCommunityById(communityId int) (*Community, 
 		return nil, err
 	}
 
-	err = rows.Err()
-	if err != nil {
-		return nil, ErrNoRowsAvailable
-	}
-
 	return &community, nil
 }
 
@@ -148,29 +143,30 @@ func (r *SQLCommunityRepository) GetAllCommunities(filter Filter) ([]Community, 
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
 		cm.id, cm.name, cm.slug, cm.description, cm.banner, cm.member_count,
-		cm.created_by, cm.created_at, u.username AS community_creator,
+		cm.created_by, cm.created_at, u.username AS community_creator
 		FROM communities AS cm
 		INNER JOIN users AS u ON cm.created_by = u.id
 	`
 	var args []interface{}
+	argPos := 1
 
-	if filter.Query != ""{
-		queryStatement += " WHERE LOWER(cm.name) LIKE ?"
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(cm.name) LIKE $%d", argPos)
 		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
 	}
 
-	queryStatement += " ORDER BY cm.created_at DESC"
+	queryStatement += " GROUP BY cm.id, u.username"
 
 	if filter.OrderBy == "popular" {
-		queryStatement += " cm.created_at DESC"
-	}else {
-		queryStatement+= " ORDER BY cm.created_at DESC"
+		queryStatement += " ORDER BY cm.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY cm.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
@@ -210,8 +206,9 @@ func (r *SQLCommunityRepository) GetAllCommunities(filter Filter) ([]Community, 
 func (r *SQLCommunityRepository) JoinACommunity(userId int, communityId int, role string) error {
 	queryStatement := `
 		INSERT INTO community_members (user_id, community_id, role) 
-		VALUES (?, ?, ? )
+		VALUES ($1, $2, $3)
 		`
+
 	_, err := r.db.Exec(queryStatement, userId, communityId, role)
 	if err != nil {
 		return err
@@ -222,10 +219,11 @@ func (r *SQLCommunityRepository) JoinACommunity(userId int, communityId int, rol
 
 func (r *SQLCommunityRepository) LeaveACommunity(userId, communityId int) error {
 	queryStatement := `
-		DELETE FROM community_members WHERE user_id = ? AND community_id = ?
+		DELETE FROM community_members 
+		WHERE user_id = $1 AND community_id = $2
 	`
 
-	rows, err := r.db.Exec(queryStatement, userId)
+	rows, err := r.db.Exec(queryStatement, userId, communityId)
 	if err != nil {
 		return  err
 	}
@@ -249,8 +247,8 @@ func (r *SQLCommunityRepository) GetAllCommunityMembers(communityId int) ([]Comm
 		FROM community_members AS cm
 		INNER JOIN users AS u ON cm.user_id = u.id
 		INNER JOIN communities AS c ON cm.community_id = c.id
-		WHERE cm.community_id = ?
-		GROUP BY cm.user_id
+		WHERE cm.community_id = $1
+		GROUP BY cm.user_id, u.username
 		ORDER BY cm.joined_at
 	`
 
@@ -280,7 +278,7 @@ func (r *SQLCommunityRepository) GetAllCommunityMembers(communityId int) ([]Comm
 
 func (r *SQLCommunityRepository) DeleteACommunity(communityId int) error {
 	queryStatement := `
-		DELETE FROM communities WHERE id = ?
+		DELETE FROM communities WHERE id = $1
 	`
 
 	rows, err := r.db.Exec(queryStatement, communityId)
@@ -302,8 +300,8 @@ func (r *SQLCommunityRepository) DeleteACommunity(communityId int) error {
 
 func (r *SQLCommunityRepository) UpdateACommunity(cm *Community) error {
 	queryStatement := `
-		UPDATE communities SET name = ?, slug = ?, description = ?, banner = ?
-		WHERE id = ?
+		UPDATE communities SET name = $1, slug = $2, description = $3, banner = $4
+		WHERE id = $5
 	`
 
 	_, err := r.db.Exec(queryStatement, cm.Name, cm.Slug, cm.Description, cm.Banner, cm.ID)

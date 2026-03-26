@@ -3,7 +3,9 @@ package comments
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
+	"strings"
 )
 
 type CommentsRepository interface{
@@ -57,20 +59,18 @@ func calculateMetaData(totalRecords, page, pageSize int) MetaData {
 func (r *SQLCommentsRepository) CreateComment(postId, userId int, body string, parent_id *int) (int, error) {
 	queryStatement := `
 		INSERT INTO comments (post_id, user_id, parent_id, body) 
-		VALUES (?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4) RETURNING id
 		`
-	
-	result, err := r.db.Exec(queryStatement, postId, userId, parent_id, body)
+
+	var commentId int
+	row := r.db.QueryRow(queryStatement, postId, userId, parent_id, body)
+
+	err := row.Scan(&commentId)
 	if err != nil {
 		return 0, err
 	}
 
-	commentId, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	return int(commentId), nil
+	return commentId, nil
 }
 
 func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]Comments, MetaData, error) {
@@ -90,25 +90,29 @@ func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]
 		INNER JOIN posts AS p ON c.post_id = p.id
 		LEFT JOIN comments AS replies ON replies.parent_id = c.id
 		LEFT JOIN comment_votes AS cv ON c.id = cv.comment_id
-		WHERE c.post_id = ? AND c.parent_id IS NULL
+		WHERE c.post_id = $1 AND c.parent_id IS NULL
 	`
 
 	var args []interface{}
+	argPos := 2
 
-	args = append(args, postId)
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(c.body) LIKE $%d", argPos)
+		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
+	}
 
-	queryStatement += " GROUP BY c.id"
+	queryStatement += " GROUP BY c.id, u.username"
 
 	if filter.OrderBy == "popular" {
 		queryStatement += " ORDER BY vote_count DESC, c.created_at DESC"
-	}else {
-		queryStatement+= " ORDER BY c.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY c.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {
@@ -156,7 +160,7 @@ func (r *SQLCommentsRepository) GetCommentById(commentId int) (*Comments, error)
 		INNER JOIN posts AS p ON c.post_id = p.id
 		LEFT JOIN comments AS replies ON replies.parent_id = c.id
 		LEFT JOIN comment_votes AS cv ON c.id = cv.comment_id
-		WHERE c.id = ? 
+		WHERE c.id = $1
 		GROUP BY c.id
 	`
 
@@ -180,8 +184,8 @@ func (r *SQLCommentsRepository) GetCommentById(commentId int) (*Comments, error)
 func (r *SQLCommentsRepository) UpdateComment(comment *Comments) error {
 	queryStatement := `
 		UPDATE comments 
-		SET body = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
+		SET body = $1, updated_at = NOW()
+		WHERE id = $2
 	`
 
 	_, err := r.db.Exec(queryStatement, comment.Body, comment.ID)
@@ -195,7 +199,7 @@ func (r *SQLCommentsRepository) UpdateComment(comment *Comments) error {
 func (r *SQLCommentsRepository) DeleteComment(commentId int) error {
 	queryStatement := `
 		DELETE FROM comments
-		WHERE id = ?
+		WHERE id = $1
 	`
 	rows, err := r.db.Exec(queryStatement, commentId)
 	if err != nil {
@@ -221,28 +225,34 @@ func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter Filter) 
 	}
 
 	queryStatement := `
-		SELECT SELECT COUNT(*) OVER() AS total_records,
+		SELECT COUNT(*) OVER() AS total_records,
 		c.id, c.post_id, c.user_id, c.body, c.parent_id, c.created_at,
 		u.username AS author
 		FROM comments AS c
 		INNER JOIN users AS u ON c.user_id = u.id
-		WHERE c.parent_id = ?
+		WHERE c.parent_id = $1
 	`
 
 	var args []interface{}
+	argPos := 2
 
-	args = append(args, commentId)
+	if filter.Query != "" {
+		queryStatement += fmt.Sprintf(" AND LOWER(c.title) LIKE $%d", argPos)
+		args = append(args, "%"+strings.ToLower(filter.Query)+"%")
+		argPos++
+	}
 
-	queryStatement += " GROUP BY c.id"
+	queryStatement += " GROUP BY c.id, u.username"
 
 	if filter.OrderBy == "popular" {
-		queryStatement+= " ORDER BY c.created_at DESC"
+		queryStatement += " ORDER BY c.created_at DESC"
+	} else {
+		queryStatement += " ORDER BY c.created_at DESC"
 	}
 
 	offset := (filter.Page - 1) * filter.PageSize
-	limit := filter.PageSize
-	queryStatement += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	args = append(args, filter.PageSize, offset)
 
 	rows, err := r.db.Query(queryStatement, args...)
 	if err != nil {

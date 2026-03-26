@@ -9,15 +9,20 @@ import (
 	"os"
 	"os/signal"
 	"prose-blog/auth"
+	"prose-blog/comments"
+	"prose-blog/community"
+	"prose-blog/followers"
 	"prose-blog/migration"
 	"prose-blog/posts"
 	ratelimit "prose-blog/rate-limit"
 	"prose-blog/users"
+	"prose-blog/votes"
 	"sync"
 	"syscall"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type Application struct {
@@ -27,6 +32,10 @@ type Application struct {
 	userRepo users.UserRepository
 	authRepo auth.AuthRepository
 	postRepo posts.PostRepository
+	commentRepo comments.CommentsRepository
+	commRepo community.CommunityRepository
+	votesRepo votes.VoteRepository
+	followersRepo followers.FollowersRepository
 	stopChan chan struct{}
 	server 	 *http.Server
 	scheduleList map[int]chan struct{}
@@ -34,8 +43,8 @@ type Application struct {
 }
 
 func main() {
-	dbName := "prose_blog_database.db"
-	db, err := connectDb(dbName)
+	godotenv.Load()
+	db, err := connectDb()
 	if err != nil {
 		log.Fatal("Failed to connect to db", err)
 	}
@@ -48,6 +57,10 @@ func main() {
 		limiter:  ratelimit.NewIPLimiter(10, 20),
 		userRepo: users.NewSQLUserRepository(db),
 		authRepo: auth.NewSQLAuthRepository(db),
+		commentRepo: comments.NewSQLCommentsRepository(db),
+		commRepo: community.NewSQLCommunityRepository(db),
+		votesRepo: votes.NewSQLVoteRepository(db),
+		followersRepo: followers.NewSQLFollowersRepository(db),
 		stopChan: make(chan struct{}),
 		postRepo: posts.NewSQLPostRepository(db),
 		scheduleList: make(map[int]chan struct{}),
@@ -58,25 +71,23 @@ func main() {
 		app.errorLog.Printf("failed to restore scheduled posts: %v", err)
 	}
 
-
-	// Clean up expired refresh tokens in the db
 	app.StartTokenCleanUp()
 
-	// Start server on go routines so it doesnt block
-	// the graceful shoutdown signal from stopChan
+	errCh := make(chan error, 1)
 	go func (){
 		app.infoLog.Println("Server started on PORT 9000")
-		err = app.Serve()
-		if err != nil {
-			app.errorLog.Fatal("opening port failed:", err)
-		}
+		errCh <-app.Serve()
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
 
-	app.infoLog.Println("Shutting down server")
+	select{
+	case err := <-errCh:
+		app.errorLog.Fatal("server error:", err)
+	case <-quit:
+		app.infoLog.Println("Shutting down server...")
+	}
 
     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
     defer cancel()
@@ -87,14 +98,17 @@ func main() {
 
     close(app.stopChan)
 
-    db.Close()
-
     app.infoLog.Println("server stopped cleanly")
 }
 
 
-func connectDb(name string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", name)
+func connectDb() (*sql.DB, error) {
+	conn := os.Getenv("DATABASE_URL")
+	if conn == "" {
+        log.Fatal("DATABASE_URL environment variable not set")
+    }
+	
+	db, err := sql.Open("postgres", conn)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +118,19 @@ func connectDb(name string) (*sql.DB, error) {
 		log.Fatal(err)
 	}
   
+	_, err = db.Exec("PRAGMA journal_mode=WAL")
+	_, err = db.Exec("PRAGMA foreign_keys=ON")
+
 	migrator := migration.NewMigrator(db)
     err = migrator.RunMigrations()
     if err != nil {
         return nil, fmt.Errorf("migrations failed: %w", err)
     }
+
+	db.SetMaxOpenConns(25)
+    db.SetMaxIdleConns(25)
+    db.SetConnMaxIdleTime(5 * time.Minute)
+    db.SetConnMaxLifetime(2 * time.Hour)
 
 	return db, nil
 }
