@@ -25,12 +25,6 @@ type DeleteUserResponse struct {
 	Message string  `json:"message"`
 }
 
-type UserDetails struct {
-	ID int `json:"id"`
-	Username string  `json:"username"`
-	Email string	 `json:"email"`
-	Profile users.Profile `json:"profile"`
-}
 
 func (app *Application) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := app.userRepo.GetAllUsers()
@@ -80,12 +74,7 @@ func (app *Application) GetUserById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helpers.WriteJSON(w, http.StatusOK, UserDetails{
-		ID: user.ID,
-		Username: user.Username,
-		Email: user.Email,
-		Profile: user.Profile,
-	})
+	helpers.WriteJSON(w, http.StatusOK, user)
 }
 
 func (app *Application) DeleteUser(w http.ResponseWriter, r *http.Request) {

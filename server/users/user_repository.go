@@ -68,7 +68,7 @@ func (r *SQLUserRepository) CreateUser(username, email, password, bio string, ka
 
 func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
 	queryStatement := `SELECT 
-	u.id, u.username, u.email, u.password, u.created_at, p.bio, p.karma
+	u.id, u.username, u.email, u.created_at, p.bio, p.karma
 	FROM users AS u INNER JOIN profiles AS p ON u.id = p.user_id
 	WHERE u.id = $1
 	`
@@ -76,8 +76,7 @@ func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
 
 	var user User
 	err :=  rows.Scan(
-		&user.ID, &user.Username, &user.Email, 
-		&user.Password, &user.CreatedAt, 
+		&user.ID, &user.Username, &user.Email, &user.CreatedAt,
 		&user.Profile.Bio, &user.Profile.Karma,
 	)
 	if err != nil {
