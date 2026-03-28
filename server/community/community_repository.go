@@ -23,6 +23,7 @@ type CommunityRepository interface {
 	GetAllCommunityMembers(communityId int) ([]CommunityMember, error) 
 	DeleteACommunity(communityId int) error 
 	UpdateACommunity(cm *Community) error 
+	IsMember(userId, communityId int) (bool, error)
 }
 
 type SQLCommunityRepository struct {
@@ -62,7 +63,7 @@ func calculateMetaData(totalRecords, page, pageSize int) MetaData {
 
 func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner string, createdBy int) (int, error) {
 	queryStatement := `
-		INSERT INTO communities (name, slug, description, banner, created_by) 
+		INSERT INTO communities (name, slug, description, banner_url, created_by) 
 		VALUES ($1, $2, $3, $4, $5) RETURNING id
 	`
 
@@ -85,7 +86,7 @@ func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner
 
 func (r *SQLCommunityRepository) GetCommunityBySlug(communitySlug string) (*Community, error) {
 	queryStatement := `
-		SELECT cm.id, cm.name, cm.slug, cm.description, cm.banner, cm.member_count, 
+		SELECT cm.id, cm.name, cm.slug, cm.description, cm.banner_url, cm.member_count, 
 		cm.created_by, cm.created_at, u.username AS community_creator
 		FROM communities AS cm
 		INNER JOIN users AS u ON cm.created_by = u.id
@@ -111,7 +112,7 @@ func (r *SQLCommunityRepository) GetCommunityBySlug(communitySlug string) (*Comm
 
 func (r *SQLCommunityRepository) GetCommunityById(communityId int) (*Community, error) {
 	queryStatement := `
-		SELECT cm.id, cm.name, cm.slug, cm.description, cm.banner, cm.member_count, 
+		SELECT cm.id, cm.name, cm.slug, cm.description, cm.banner_url, cm.member_count, 
 		cm.created_by, cm.created_at, u.username AS community_creator
 		FROM communities AS cm
 		INNER JOIN users AS u ON cm.created_by = u.id
@@ -142,7 +143,7 @@ func (r *SQLCommunityRepository) GetAllCommunities(filter Filter) ([]Community, 
 
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
-		cm.id, cm.name, cm.slug, cm.description, cm.banner, cm.member_count,
+		cm.id, cm.name, cm.slug, cm.description, cm.banner_url, cm.member_count,
 		cm.created_by, cm.created_at, u.username AS community_creator
 		FROM communities AS cm
 		INNER JOIN users AS u ON cm.created_by = u.id
@@ -208,16 +209,37 @@ func (r *SQLCommunityRepository) JoinACommunity(userId int, communityId int, rol
 		INSERT INTO community_members (user_id, community_id, role) 
 		VALUES ($1, $2, $3)
 		`
+	tx, err := r.db.Begin()
+	if err != nil {
+		return  err
+	}
+	defer tx.Rollback()
 
-	_, err := r.db.Exec(queryStatement, userId, communityId, role)
+	_, err = tx.Exec(queryStatement, userId, communityId, role)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	updateStatement := `
+		UPDATE communities SET member_count = member_count + 1
+		WHERE id = $1
+	`
+
+	_, err = tx.Exec(updateStatement, communityId)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *SQLCommunityRepository) LeaveACommunity(userId, communityId int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return  err
+	}
+	defer tx.Rollback()
+
 	queryStatement := `
 		DELETE FROM community_members 
 		WHERE user_id = $1 AND community_id = $2
@@ -237,7 +259,17 @@ func (r *SQLCommunityRepository) LeaveACommunity(userId, communityId int) error 
 		return ErrNoRowsAvailable
 	}
 
-	return nil
+	updateStatement := `
+		UPDATE communities SET member_count = member_count - 1
+		WHERE id = $1
+	`
+
+	_, err = r.db.Exec(updateStatement, communityId)
+	if err != nil {
+		return  err
+	}
+
+	return tx.Commit()
 }
 
 func (r *SQLCommunityRepository) GetAllCommunityMembers(communityId int) ([]CommunityMember, error) {
@@ -248,7 +280,7 @@ func (r *SQLCommunityRepository) GetAllCommunityMembers(communityId int) ([]Comm
 		INNER JOIN users AS u ON cm.user_id = u.id
 		INNER JOIN communities AS c ON cm.community_id = c.id
 		WHERE cm.community_id = $1
-		GROUP BY cm.user_id, u.username
+		GROUP BY cm.user_id, cm.community_id, u.username, c.name
 		ORDER BY cm.joined_at
 	`
 
@@ -300,7 +332,7 @@ func (r *SQLCommunityRepository) DeleteACommunity(communityId int) error {
 
 func (r *SQLCommunityRepository) UpdateACommunity(cm *Community) error {
 	queryStatement := `
-		UPDATE communities SET name = $1, slug = $2, description = $3, banner = $4
+		UPDATE communities SET name = $1, slug = $2, description = $3, banner_url = $4
 		WHERE id = $5
 	`
 
@@ -311,3 +343,17 @@ func (r *SQLCommunityRepository) UpdateACommunity(cm *Community) error {
 
 	return nil
 }
+
+func (r *SQLCommunityRepository) IsMember(userId, communityId int) (bool, error) {
+    statement := `
+        SELECT COUNT(*) FROM community_members
+        WHERE user_id = $1 AND community_id = $2
+    `
+    var count int
+    err := r.db.QueryRow(statement, userId, communityId).Scan(&count)
+    if err != nil {
+        return false, err
+    }
+    return count > 0, nil
+}
+

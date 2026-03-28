@@ -39,12 +39,14 @@ func (app *Application) CreateComment(w http.ResponseWriter, r *http.Request) {
 
 	postId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Invalid Post ID", http.StatusBadRequest)
 		return
 	}
 
 	post, err := app.postRepo.GetPostById(postId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Post Not Found", http.StatusNotFound)
 		return
 	}
@@ -58,6 +60,7 @@ func (app *Application) CreateComment(w http.ResponseWriter, r *http.Request) {
 
 	commentId, err := app.commentRepo.CreateComment(post.ID, userId, createComment.Body, createComment.ParentId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -88,6 +91,7 @@ func (app *Application) GetCommentsByPost(w http.ResponseWriter, r *http.Request
 
 	commentsList, metadata, err := app.commentRepo.GetCommentsByPost(postId, filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Invalid Post Id", http.StatusNotFound)
 		return
 	}
@@ -111,6 +115,7 @@ func (app *Application) GetCommentById(w http.ResponseWriter, r *http.Request) {
 
 	comment, err := app.commentRepo.GetCommentById(commentId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Comment Not Found", http.StatusNotFound)
 		return
 	}
@@ -128,6 +133,7 @@ func (app *Application) DeleteComment(w http.ResponseWriter, r *http.Request) {
 
 	comment, err := app.commentRepo.GetCommentById(commentId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Comment Not Found", http.StatusNotFound)
 		return
 	}
@@ -140,6 +146,7 @@ func (app *Application) DeleteComment(w http.ResponseWriter, r *http.Request) {
 
 	err = app.commentRepo.DeleteComment(commentId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Comment Not found", http.StatusNotFound)
 		return
 	}
@@ -157,6 +164,7 @@ func (app *Application) UpdateComment(w http.ResponseWriter, r *http.Request) {
 
 	cm, err := app.commentRepo.GetCommentById(commentId)
 	if cm.UserId != userID {
+		app.errorLog.Println(err)
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -170,6 +178,7 @@ func (app *Application) UpdateComment(w http.ResponseWriter, r *http.Request) {
 
 	err = app.commentRepo.UpdateComment(&comments.Comments{ID: commentId, Body: comment.Body})
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -193,6 +202,7 @@ func (app *Application) GetNestedComments(w http.ResponseWriter, r *http.Request
 
 	commentsList, metadata, err := app.commentRepo.GetNestedComments(commentId, filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

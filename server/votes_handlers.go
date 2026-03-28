@@ -36,6 +36,7 @@ func (app *Application) VotePost(w http.ResponseWriter, r *http.Request) {
 
 	post, err := app.postRepo.GetPostById(postId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Post Not Found", http.StatusNotFound)
 		return
 	}
@@ -49,6 +50,7 @@ func (app *Application) VotePost(w http.ResponseWriter, r *http.Request) {
 
 	err = app.votesRepo.VoteAPost(userId, post.ID, cv.Vote_Type)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -70,41 +72,19 @@ func (app *Application) GetAllPostVote(w http.ResponseWriter, r *http.Request) {
 
 	post, err := app.postRepo.GetPostById(postId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Post Not Found", http.StatusNotFound)
 		return
 	}
 
 	votesList, err := app.votesRepo.GetPostVotes(post.ID)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	helpers.WriteJSON(w, http.StatusCreated, votesList)
-}
-
-func (app *Application) DeletePostVotes(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserID).(int)
-
-	postId, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "Invalid Post ID", http.StatusBadRequest)
-		return
-	}
-
-	post, err := app.postRepo.GetPostById(postId)
-	if err != nil {
-		http.Error(w, "Post Not Found", http.StatusNotFound)
-		return
-	}
-
-	err = app.votesRepo.DeletePostVotes(post.ID, userID)
-	if err != nil {
-		http.Error(w, "Post Not found", http.StatusNotFound)
-		return
-	}
-
-	helpers.WriteJSON(w, http.StatusOK, map[string]string{"message": "Vote Removed Successfully"})
 }
 
 func (app *Application) VoteComment(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +98,7 @@ func (app *Application) VoteComment(w http.ResponseWriter, r *http.Request) {
 
 	comment, err := app.commentRepo.GetCommentById(commentId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Comment Not Found", http.StatusNotFound)
 		return
 	}
@@ -129,8 +110,9 @@ func (app *Application) VoteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.votesRepo.VoteAComment(comment.ID, userId, cv.Vote_Type)
+	err = app.votesRepo.VoteAComment( userId, comment.ID, cv.Vote_Type)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -152,44 +134,17 @@ func (app *Application) GetAllCommentVote(w http.ResponseWriter, r *http.Request
 
 	comment, err := app.commentRepo.GetCommentById(commentId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Comment Not Found", http.StatusNotFound)
 		return
 	}
 
 	votesList, err := app.votesRepo.GetPostComments(comment.ID)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	helpers.WriteJSON(w, http.StatusOK, votesList)
-}
-
-func (app *Application) DeleteCommentVotes(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(middleware.UserID).(int)
-	commentId, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "Invalid Comment ID", http.StatusBadRequest)
-		return
-	}
-
-	comment, err := app.commentRepo.GetCommentById(commentId)
-	if err != nil {
-		http.Error(w, "Comment Not Found", http.StatusNotFound)
-		return
-	}
-
-	if comment.UserId != userID {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-
-	err = app.votesRepo.DeletePostComment(comment.ID)
-	if err != nil {
-		http.Error(w, "Post Not found", http.StatusNotFound)
-		return
-	}
-
-	helpers.WriteJSON(w, http.StatusOK, map[string]string{"message": "Vote Removed Successfully"})
 }

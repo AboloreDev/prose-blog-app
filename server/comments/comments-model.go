@@ -11,7 +11,7 @@ type Comments struct {
 	TotalRecords int `json:"total_records"`
 	CommentVoteCount int `json:"comment_vote_count"`
 	ReplyCount int `json:"reply_count"`
-	ParentId int `json:"parent_id"`
+	ParentId *int `json:"parent_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

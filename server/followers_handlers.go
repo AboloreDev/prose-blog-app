@@ -23,6 +23,7 @@ func (app *Application) FollowUser(w http.ResponseWriter, r *http.Request) {
 
     err = app.followersRepo.FollowUser(followerID, followingID)
     if err != nil {
+        app.errorLog.Println(err)
         http.Error(w, "Internal Server Error", http.StatusInternalServerError)
         return
     }
@@ -43,6 +44,7 @@ func (app *Application) UnfollowUser(w http.ResponseWriter, r *http.Request) {
 
     err = app.followersRepo.UnfollowUser(followerID, followingID)
     if err != nil {
+        app.errorLog.Println(err)
         http.Error(w, "Internal Server Error", http.StatusInternalServerError)
         return
     }
@@ -61,6 +63,7 @@ func (app *Application) GetFollowers(w http.ResponseWriter, r *http.Request) {
 
     followers, err := app.followersRepo.GetFollowers(userID)
     if err != nil {
+        app.errorLog.Println(err)
         http.Error(w, "Internal Server Error", http.StatusInternalServerError)
         return
     }
@@ -77,6 +80,7 @@ func (app *Application) GetFollowing(w http.ResponseWriter, r *http.Request) {
 
     following, err := app.followersRepo.GetFollowing(userID)
     if err != nil {
+        app.errorLog.Println(err)
         http.Error(w, "Internal Server Error", http.StatusInternalServerError)
         return
     }
@@ -93,6 +97,7 @@ func (app *Application) GetFollowCount(w http.ResponseWriter, r *http.Request) {
 
     followingList, err := app.followersRepo.GetFollowCount(userID)
     if err != nil {
+        app.errorLog.Println(err)
         http.Error(w, "Internal Server Error", http.StatusInternalServerError)
         return
     }
@@ -110,6 +115,7 @@ func (app *Application) IsFollowing(w http.ResponseWriter, r *http.Request) {
     }
 
     if followerID == followingID {
+        app.errorLog.Println(err)
         http.Error(w, "Cannot follow yourself", http.StatusBadRequest)
         return
     }

@@ -12,7 +12,7 @@ var ErrInvalidCredential = errors.New("invalid credential")
 var ErrUserNotFound = errors.New("user not found")
 
 type UserRepository interface {
-	CreateUser(username, email, password, bio string, karma int ) (int, error)
+	CreateUser(username, email, password, bio, avatar_url string, karma int ) (int, error)
 	GetUserById(id int) (*User, error)
 	GetUserByEmail(email string) (*User, error)
 	GetAllUsers() ([]User, error)
@@ -29,7 +29,7 @@ func NewSQLUserRepository(db *sql.DB) UserRepository {
 	return &SQLUserRepository{db: db}
 }
 
-func (r *SQLUserRepository) CreateUser(username, email, password, bio string, karma int) (int, error) {
+func (r *SQLUserRepository) CreateUser(username, email, password, bio, avatar_url string, karma int) (int, error) {
 	ctx := context.Background()
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -52,8 +52,8 @@ func (r *SQLUserRepository) CreateUser(username, email, password, bio string, ka
 		return 0, err
 	}
 
-	profileStatement := `INSERT INTO profiles (user_id, bio, karma) VALUES ($1, $2, $3)`
-	_, err = tx.ExecContext(ctx, profileStatement, userId, bio, karma)
+	profileStatement := `INSERT INTO profiles (user_id, bio, avatar_url, karma) VALUES ($1, $2, $3, $4)`
+	_, err = tx.ExecContext(ctx, profileStatement, userId, bio, avatar_url, karma)
 	if err != nil {
 		return 0, err
 	}
@@ -68,7 +68,7 @@ func (r *SQLUserRepository) CreateUser(username, email, password, bio string, ka
 
 func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
 	queryStatement := `SELECT 
-	u.id, u.username, u.email, u.created_at, p.bio, p.karma
+	u.id, u.username, u.email, u.created_at, p.bio, p.avatar_url, p.karma
 	FROM users AS u INNER JOIN profiles AS p ON u.id = p.user_id
 	WHERE u.id = $1
 	`
@@ -77,7 +77,7 @@ func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
 	var user User
 	err :=  rows.Scan(
 		&user.ID, &user.Username, &user.Email, &user.CreatedAt,
-		&user.Profile.Bio, &user.Profile.Karma,
+		&user.Profile.Bio, &user.Profile.Avatar_url,  &user.Profile.Karma,
 	)
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (r *SQLUserRepository) GetAllUsers() ([]User, error) {
 
 func (r *SQLUserRepository) GetUserByEmail(email string) (*User, error) {
 	queryStatement := `SELECT
-	u.id, u.username, u.email, u.password, u.created_at, p.bio, p.karma
+	u.id, u.username, u.email, u.password, u.created_at, p.bio, p.avatar_url, p.karma
 	FROM users AS u INNER JOIN profiles AS p 
 	ON u.id = p.user_id WHERE u.email = $1`
 
@@ -127,7 +127,7 @@ func (r *SQLUserRepository) GetUserByEmail(email string) (*User, error) {
 	err := rows.Scan(
 		&user.ID, &user.Username, &user.Email, 
 		&user.Password, &user.CreatedAt, 
-		&user.Profile.Bio, &user.Profile.Karma,
+		&user.Profile.Bio, &user.Profile.Avatar_url, &user.Profile.Karma,
 	)
 
 	if err != nil {
@@ -183,8 +183,8 @@ func (r *SQLUserRepository) UpdateUser(user *User) error {
 	}
 
 	profileStatement := `
-		UPDATE profiles SET bio = $1, updated_at = NOW()
-		WHERE user_id = $2
+		UPDATE profiles SET bio = $1, avatar_url = $2, updated_at = NOW()
+		WHERE user_id = $3
 	`
 	profileStmt, err := tx.PrepareContext(ctx, profileStatement)
 	if err != nil {
@@ -192,7 +192,7 @@ func (r *SQLUserRepository) UpdateUser(user *User) error {
 	}
 	defer profileStmt.Close()
 
-	_, err = profileStmt.Exec(user.Profile.Bio, user.ID)
+	_, err = profileStmt.Exec(user.Profile.Bio, user.Profile.Avatar_url, user.ID)
 	if err != nil {
 		return  err
 	}

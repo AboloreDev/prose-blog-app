@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,7 +13,7 @@ import (
 var ErrInvalidToken = errors.New("Invalid Token")
 var ErrUnexpectedSigningMethod = errors.New("Unexpected Signing Method")
 
-var jwtsecretKey = []byte("JWT_SECRET_KEY")
+var jwtsecretKey = []byte(os.Getenv("JWT_SECRET"))
 
 type Claims struct {
 	UserID int `json:"user_id"`
@@ -36,9 +37,9 @@ func GenerateAccessToken(userId int) (string, error) {
 func ValidateAccessToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
-		Claims{},
+		&Claims{},
 		func(t *jwt.Token) (interface{}, error) {
-			_, ok := t.Method.(*jwt.SigningMethodECDSA)
+			_, ok := t.Method.(*jwt.SigningMethodHMAC)
 			if !ok {
 				return nil, ErrUnexpectedSigningMethod
 			}

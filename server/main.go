@@ -50,6 +50,7 @@ func main() {
 	}
 	defer db.Close()
 	fmt.Println("Database connection successful")
+	
 
 	app := &Application{
 		errorLog: log.New(os.Stderr, "ERROR\t", log.Ltime|log.LstdFlags|log.Lmicroseconds|log.Lshortfile),
@@ -72,7 +73,7 @@ func main() {
 	}
 
 	app.StartTokenCleanUp()
-
+	
 	errCh := make(chan error, 1)
 	go func (){
 		app.infoLog.Println("Server started on PORT 9000")

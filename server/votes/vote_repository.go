@@ -3,7 +3,6 @@ package votes
 import (
 	"database/sql"
 	"errors"
-	"strings"
 )
 
 var ErrDuplicateVotes = errors.New("Duplicate votes")
@@ -13,10 +12,8 @@ var ErrNoRowsAvailable = errors.New("No rows available")
 type VoteRepository interface {
 	VoteAPost(user_id, post_id int, vote_type string) error
 	GetPostVotes(postId int) ([]PostVotes, error)
-	DeletePostVotes(postId, userId int) error
 	VoteAComment(user_id, comment_id int, vote_type string) error
 	GetPostComments(commentId int) ([]CommentVotes, error)
-	DeletePostComment(commentId int) error
 }
 
 type SQLVoteRepository struct {
@@ -27,22 +24,44 @@ func NewSQLVoteRepository(db *sql.DB) VoteRepository {
 	return &SQLVoteRepository{db: db}
 }
 
-func (r *SQLVoteRepository) VoteAPost(user_id, post_id int, vote_type string) error {
-	if vote_type != "up" && vote_type != "down" {
-        return ErrInvalidVoteType
-    }
-	queryStatement := `INSERT INTO votes (user_id, post_id, vote_type) VALUES ($1, $2, $3)`
-
-	_, err := r.db.Exec(queryStatement, user_id, post_id, vote_type)
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
-    	return ErrDuplicateVotes
+func (r *SQLVoteRepository) VoteAPost(userID, postID int, voteType string) error {
+	if voteType != "up" && voteType != "down" {
+		return ErrInvalidVoteType
 	}
+
+	var existingVoteType string
+	err := r.db.QueryRow(`
+		SELECT vote_type FROM votes 
+		WHERE user_id = $1 AND post_id = $2
+	`, userID, postID).Scan(&existingVoteType)
+
+	if err == sql.ErrNoRows {
+		_, err = r.db.Exec(`
+			INSERT INTO votes (user_id, post_id, vote_type) 
+			VALUES ($1, $2, $3)
+		`, userID, postID, voteType)
 		return err
 	}
 
-	return nil
+	if err != nil {
+		return err
+	}
+
+	if existingVoteType == voteType {
+		_, err = r.db.Exec(`
+			DELETE FROM votes 
+			WHERE user_id = $1 AND post_id = $2
+		`, userID, postID)
+		return err
+	}
+
+	_, err = r.db.Exec(`
+		UPDATE votes SET vote_type = $1 
+		WHERE user_id = $2 AND post_id = $3
+	`, voteType, userID, postID)
+	return err
 }
+
 
 func (r *SQLVoteRepository) GetPostVotes(postId int) ([]PostVotes, error) {
 	queryStatement := `
@@ -52,7 +71,7 @@ func (r *SQLVoteRepository) GetPostVotes(postId int) ([]PostVotes, error) {
 		FROM votes AS v
 		INNER JOIN users AS u ON v.user_id = u.id
 		WHERE v.post_id = $1
-		GROUP BY v.post_id, u.username
+		GROUP BY v.post_id, v.user_id, u.username
 		ORDER BY v.created_at DESC
 	`
 
@@ -80,46 +99,44 @@ func (r *SQLVoteRepository) GetPostVotes(postId int) ([]PostVotes, error) {
 	return votes, nil
 }
 
-func (r *SQLVoteRepository) DeletePostVotes(postId, userId int) error {
-	queryStatement := `
-		DELETE FROM votes WHERE post_id = $1 AND user_id = $2
-	`
 
-	result, err := r.db.Exec(queryStatement, postId, userId)
+
+func (r *SQLVoteRepository) VoteAComment(userID, commentID int, voteType string) error {
+	if voteType != "up" && voteType != "down" {
+		return ErrInvalidVoteType
+	}
+
+	var existingVoteType string
+	err := r.db.QueryRow(`
+		SELECT vote_type FROM comment_votes 
+		WHERE user_id = $1 AND comment_id = $2
+	`, userID, commentID).Scan(&existingVoteType)
+
+	if err == sql.ErrNoRows {
+		_, err = r.db.Exec(`
+			INSERT INTO comment_votes (user_id, comment_id, vote_type) 
+			VALUES ($1, $2, $3)
+		`, userID, commentID, voteType)
+		return err
+	}
+
 	if err != nil {
 		return err
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
+	if existingVoteType == voteType {
+		_, err = r.db.Exec(`
+			DELETE FROM comment_votes 
+			WHERE user_id = $1 AND comment_id = $2
+		`, userID, commentID)
 		return err
 	}
 
-	if rowsAffected == 0 {
-		return ErrNoRowsAvailable
-	}
-
-	return  nil
-}
-
-func (r *SQLVoteRepository) VoteAComment(user_id, comment_id int, vote_type string) error {
-	if vote_type != "up" && vote_type != "down" {
-        return ErrInvalidVoteType
-    }
-	queryStatement := `
-		INSERT INTO comment_votes (user_id, comment_id, vote_type) 
-		VALUES ($1, $2, $3)
-	`
-
-	_, err := r.db.Exec(queryStatement, user_id, comment_id, vote_type)
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
-    	return ErrDuplicateVotes
-	}
-		return err
-	}
-
-	return nil
+	_, err = r.db.Exec(`
+		UPDATE comment_votes SET vote_type = $1 
+		WHERE user_id = $2 AND comment_id = $3
+	`, voteType, userID, commentID)
+	return err
 }
 
 func (r *SQLVoteRepository) GetPostComments(commentId int) ([]CommentVotes, error) {
@@ -130,7 +147,7 @@ func (r *SQLVoteRepository) GetPostComments(commentId int) ([]CommentVotes, erro
 		FROM comment_votes AS v
 		INNER JOIN users AS u ON v.user_id = u.id
 		WHERE v.comment_id = $1
-		GROUP BY v.comment_id, u.username
+		GROUP BY v.comment_id, v.user_id, u.username
 		ORDER BY v.created_at DESC
 	`
 
@@ -159,24 +176,3 @@ func (r *SQLVoteRepository) GetPostComments(commentId int) ([]CommentVotes, erro
 	return commentVotes, nil
 }
 
-func (r *SQLVoteRepository) DeletePostComment(commentId int) error {
-	queryStatement := `
-		DELETE FROM comment_votes WHERE comment_id = $1
-	`
-
-	result, err := r.db.Exec(queryStatement, commentId)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return ErrNoRowsAvailable
-	}
-
-	return  nil
-}

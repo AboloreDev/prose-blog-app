@@ -46,7 +46,12 @@ func (app *Application) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = app.userRepo.UpdateUser(&users.User{ID: userId, Username: update.Username, Email: update.Email, Profile: users.Profile{Bio: update.Profile.Bio}})
+	if update.Profile.Avatar_url != "" && !helpers.IsValidAvatar(update.Profile.Avatar_url){
+        http.Error(w, "Invalid avatar URL", http.StatusBadRequest)
+        return
+    }
+
+	err = app.userRepo.UpdateUser(&users.User{ID: userId, Username: update.Username, Email: update.Email, Profile: users.Profile{Bio: update.Profile.Bio, Avatar_url: update.Profile.Avatar_url}})
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return

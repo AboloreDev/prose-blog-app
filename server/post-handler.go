@@ -31,6 +31,7 @@ type FetchedUserPostData struct {
 type CreatePostRequest struct {
 	Title string `json:"title"`
 	Body string	`json:"body"`
+	Image_Url string `json:"image_url"`
 	CommunityId int `json:"community_id"`
 	Status string `json:"status"`
 	PublishAt   time.Time `json:"publish_at"`
@@ -43,6 +44,13 @@ type UpdatePostRequest struct {
 
 type CreatePostResponse struct {
 	PostId int `json:"post_id"`
+	Title string `json:"title"`
+	Body string	`json:"body"`
+	Image_Url string `json:"image_url"`
+	CommunityId int `json:"community_id"`
+	Status string `json:"status"`
+	PublishAt   time.Time `json:"publish_at"`
+	Message string `json:"message"`
 }
 
 type DeletePostResponse struct {
@@ -62,42 +70,95 @@ func (app *Application) ReadWithInt(r *http.Request, key string, value int) int 
 }
 
 func (app *Application) CreatePost(w http.ResponseWriter, r *http.Request) {
-	userId := r.Context().Value(middleware.UserID).(int)
-	
-	var createRequest CreatePostRequest
-	err := helpers.ReadJSON(r, &createRequest)
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
+    userId := r.Context().Value(middleware.UserID).(int)
 
-	if createRequest.Status == "" {
-		createRequest.Status = "published"
-	}
+    err := r.ParseMultipartForm(10 << 20)
+    if err != nil {
+        http.Error(w, "File must not be more than 10mb", http.StatusBadRequest)
+        return
+    }
 
-	if createRequest.Status == "scheduled" {
-		if createRequest.PublishAt.IsZero() {
-			http.Error(w, "publish_at works for scheduled posts", http.StatusBadRequest)
-			return
-		}
+    title := r.FormValue("title")
+    body := r.FormValue("body")
+    status := r.FormValue("status")
+    communityID, _ := strconv.Atoi(r.FormValue("community_id"))
 
-		if createRequest.PublishAt.Before(time.Now()) {
-			http.Error(w, "publish_at must be a future date", http.StatusBadRequest)
-			return
-		}
-	}
+    if status == "" {
+        status = "published"
+    }
 
-	postId, err := app.postRepo.CreatePost(userId, createRequest.Title, createRequest.Body, createRequest.CommunityId, createRequest.Status)
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return 
-	}
+    if title == "" || body == "" || communityID == 0 {
+        http.Error(w, "title, body and community_id are required", http.StatusBadRequest)
+        return
+    }
 
-	if createRequest.Status == "scheduled" {
-		app.SchedulePost(postId, createRequest.PublishAt)
-	}
+    isMember, err := app.commRepo.IsMember(userId, communityID)
+    if err != nil {
+        app.errorLog.Println(err)
+        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+        return
+    }
+    if !isMember {
+        http.Error(w, "Join this community before posting", http.StatusForbidden)
+        return
+    }
 
-	helpers.WriteJSON(w, http.StatusOK, CreatePostResponse{PostId: postId})
+    imageURL := ""
+    file, _, err := r.FormFile("image")
+    if err == nil {
+        defer file.Close()
+        imageURL, err = helpers.UploadImage(file)
+        if err != nil {
+            http.Error(w, "Image upload failed", http.StatusInternalServerError)
+            return
+        }
+    }
+
+    var publishAtPtr *time.Time
+    publishAtStr := r.FormValue("publish_at")
+
+    if status == "scheduled" {
+        if publishAtStr == "" {
+            http.Error(w, "publish_at required for scheduled posts", http.StatusBadRequest)
+            return
+        }
+
+        publishAt, err := time.Parse(time.RFC3339, publishAtStr)
+        if err != nil {
+            http.Error(w, "publish_at must be RFC3339 format e.g 2026-03-27T02:00:00Z", http.StatusBadRequest)
+            return
+        }
+
+        if publishAt.Before(time.Now()) {
+            http.Error(w, "publish_at must be a future date", http.StatusBadRequest)
+            return
+        }
+
+        publishAtPtr = &publishAt
+    }
+
+    postID, err := app.postRepo.CreatePost(userId, title, body, imageURL, communityID, status, publishAtPtr)
+    if err != nil {
+        app.errorLog.Println(err)
+        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+        return
+    }
+
+    if status == "scheduled" {
+        app.infoLog.Printf("schedule countdown started for post %d", postID)
+        app.SchedulePost(postID, *publishAtPtr)
+    }
+
+    helpers.WriteJSON(w, http.StatusCreated, map[string]interface{}{
+        "message":      "Post Created Successfully",
+        "post_id":      postID,
+        "title":        title,
+        "body":         body,
+        "image_url":    imageURL,
+        "community_id": communityID,
+        "status":       status,
+        "publish_at":   publishAtStr,
+    })
 }
 
 func (app *Application) Homepage(w http.ResponseWriter, r *http.Request) {
@@ -111,6 +172,7 @@ func (app *Application) Homepage(w http.ResponseWriter, r *http.Request) {
 
 	allPosts, metadata, err := app.postRepo.GetAllPost(filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -135,6 +197,7 @@ func (app *Application) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 
 	post, err := app.postRepo.GetPostById(id)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Post Not Found", http.StatusNotFound)
 		return
 	}
@@ -157,6 +220,7 @@ func (app *Application) DeletePost(w http.ResponseWriter, r *http.Request) {
 
 	post, err := app.postRepo.GetPostById(postId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Post not found", http.StatusNotFound)
 		return
 	}
@@ -172,6 +236,7 @@ func (app *Application) DeletePost(w http.ResponseWriter, r *http.Request) {
 
 	err = app.postRepo.DeletePost(postId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "ID not found", http.StatusNotFound)
 		return
 	}
@@ -197,6 +262,7 @@ func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Reques
 
 	allCommunityPosts, metadata, err := app.postRepo.GetPostByCommunity(communityId, filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Community not found", http.StatusNotFound)
 		return
 	}
@@ -225,6 +291,7 @@ func (app *Application) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 
 	allUserPosts, metadata, err := app.postRepo.GetUserPosts(userId, filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
@@ -250,8 +317,17 @@ func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = r.ParseMultipartForm(10 << 20)
+    if err != nil {
+        r.ParseForm()
+    }
+
+	title := r.FormValue("title")
+    body := r.FormValue("body")
+
 	post, err := app.postRepo.GetPostById(postId)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Post Not Found", http.StatusNotFound)
 		return
 	}
@@ -261,15 +337,28 @@ func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var updatePostRequest UpdatePostRequest
-	err = helpers.ReadJSON(r, &updatePostRequest)
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
+	imageUrl := post.Image_url
+    file, _, err := r.FormFile("image")
+    if err == nil {
+        defer file.Close()
+        imageUrl, err = helpers.UploadImage(file)
+        if err != nil {
+            http.Error(w, "Image upload failed", http.StatusInternalServerError)
+            return
+        }
+    }
+
+	if title == "" {
+		title = post.Title
 	}
 
-	err = app.postRepo.UpdatePost(&posts.Post{ID: postId, Title: updatePostRequest.Title, Body: updatePostRequest.Body})
+	if body == "" {
+		body = post.Body
+	}
+
+	err = app.postRepo.UpdatePost(&posts.Post{ID: post.ID, Title: title, Body: body, Image_url: imageUrl})
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -291,6 +380,7 @@ func (app *Application) GetUserPostsDraft(w http.ResponseWriter, r *http.Request
 
 	allUserPosts, metadata, err := app.postRepo.GetUserPostDrafts(userId, filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "User not found", http.StatusNotFound)
 	}
 
@@ -318,6 +408,7 @@ func (app *Application) GetUserScheduledPosts(w http.ResponseWriter, r *http.Req
 
 	allUserScheduledPosts, metadata, err := app.postRepo.GetUserScheduledPosts(userId, filter)
 	if err != nil {
+		app.errorLog.Println(err)
 		http.Error(w, "User not found", http.StatusNotFound)
 	}
 
@@ -331,4 +422,14 @@ func (app *Application) GetUserScheduledPosts(w http.ResponseWriter, r *http.Req
 		Next: next, 
 		Prev: prev,
 	})	
+}
+
+func (app *Application) GetAllScheduledPosts(w http.ResponseWriter, r *http.Request) {
+	allScheduledPosts, err := app.postRepo.GetScheduledPosts()
+	if err != nil {
+		app.errorLog.Println(err)
+		http.Error(w, "Internal server error", http.StatusNotFound)
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, allScheduledPosts)	
 }

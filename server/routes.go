@@ -59,15 +59,13 @@ func (app *Application) Routes() http.Handler {
     mux.Handle("GET /api/v1/posts/scheduled",
         middleware.RequireAuth(http.HandlerFunc(app.GetUserScheduledPosts)),
     )
+    mux.HandleFunc("GET /api/v1/posts/scheduled/all", app.GetAllScheduledPosts)
 
     // Post votes
     mux.Handle("POST /api/v1/posts/{id}/vote",
         middleware.RequireAuth(http.HandlerFunc(app.VotePost)),
     )
     mux.HandleFunc("GET /api/v1/posts/{id}/votes", app.GetAllPostVote)
-    mux.Handle("DELETE /api/v1/posts/{id}/vote",
-        middleware.RequireAuth(http.HandlerFunc(app.DeletePostVotes)),
-    )
 
     // Comments
     mux.Handle("POST /api/v1/posts/{id}/comments",
@@ -88,9 +86,6 @@ func (app *Application) Routes() http.Handler {
         middleware.RequireAuth(http.HandlerFunc(app.VoteComment)),
     )
     mux.HandleFunc("GET /api/v1/comments/{id}/votes", app.GetAllCommentVote)
-    mux.Handle("DELETE /api/v1/comments/{id}/vote",
-        middleware.RequireAuth(http.HandlerFunc(app.DeleteCommentVotes)),
-    )
 
     // Communities
     mux.HandleFunc("GET /api/v1/communities", app.GetAllCommunities)
@@ -112,6 +107,9 @@ func (app *Application) Routes() http.Handler {
     mux.Handle("DELETE /api/v1/communities/{id}/join",
         middleware.RequireAuth(http.HandlerFunc(app.LeaveCommunity)),
     )
+
+    // Preset Avatars
+    mux.HandleFunc("GET /api/v1/avatars", app.GetPresetAvatars)
 
     // Middleware chain
     var handler http.Handler = mux

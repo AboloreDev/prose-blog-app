@@ -94,6 +94,7 @@ func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]
 	`
 
 	var args []interface{}
+	args = append(args, postId)
 	argPos := 2
 
 	if filter.Query != "" {
@@ -126,7 +127,8 @@ func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]
 		var comment Comments
 		err := rows.Scan(
 			&totalRecords, &comment.ID, &comment.Body, &comment.UserId, &comment.PostId,
-			&comment.ParentId, &comment.CreatedAt, &comment.Author, &comment.ReplyCount, &comment.CommentVoteCount,
+			&comment.ParentId, &comment.CreatedAt, &comment.Author, &comment.ReplyCount, 
+			&comment.CommentVoteCount,
 		)
 		if err != nil {
 			return nil, MetaData{}, err
@@ -161,7 +163,7 @@ func (r *SQLCommentsRepository) GetCommentById(commentId int) (*Comments, error)
 		LEFT JOIN comments AS replies ON replies.parent_id = c.id
 		LEFT JOIN comment_votes AS cv ON c.id = cv.comment_id
 		WHERE c.id = $1
-		GROUP BY c.id
+		GROUP BY c.id, u.username
 	`
 
 	rows := r.db.QueryRow(queryStatement, commentId)	
@@ -234,6 +236,7 @@ func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter Filter) 
 	`
 
 	var args []interface{}
+	args = append(args, commentId)
 	argPos := 2
 
 	if filter.Query != "" {

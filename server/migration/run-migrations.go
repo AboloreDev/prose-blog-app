@@ -54,7 +54,11 @@ func (r *Migrator) RunMigrations() error {
 	if err != nil {
 		return err
 	}
-
+	err = r.CreateNotificationsTable()
+	if err != nil {
+		return err
+	}
+	
 	return nil
 }
 
@@ -130,4 +134,10 @@ func (r *Migrator) CreateCommunityMembersTable() error {
 	return nil
 }
 
-
+func (r *Migrator) CreateNotificationsTable() error {
+	_, err := r.db.Exec(notificationsTableSchema)
+	if err != nil {
+		return fmt.Errorf("could not create notifications table: %w", err)
+	}
+	return nil
+}

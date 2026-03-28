@@ -7,7 +7,7 @@ type Community struct {
 	Name string `json:"name"`
 	Slug string `json:"slug"`
 	Description string `json:"description"`
-	Banner string `json:"banner"`
+	Banner string `json:"banner_url"`
 	CreatedAt time.Time `json:"created_at"`
 	MemberCount int `json:"member_count"`
 	CreatedBy int `json:"created_by"`

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS posts (
     community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
     title        TEXT NOT NULL,
     body         TEXT NOT NULL,
+    image_url   TEXT,
     status       TEXT NOT NULL DEFAULT 'published',
     publish_at   TIMESTAMPTZ,
     view_count   INTEGER NOT NULL DEFAULT 0,
@@ -88,3 +89,23 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id                SERIAL PRIMARY KEY,
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_id           INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+    comment_id        INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+    notification_type TEXT NOT NULL CHECK(notification_type IN (
+                      'new_follower', 
+                      'post_upvote', 
+                      'post_downvote', 
+                      'comment_upvote', 
+                      'comment_downvote', 
+                      'new_comment',
+                      'new_reply'
+                      )),
+    message           TEXT NOT NULL,
+    is_read           BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)

@@ -8,21 +8,7 @@ import (
 	"strconv"
 )
 
-type CreateCommunityRequest struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-	Description string `json:"description"`
-	Banner string `json:"banner"`
-}
 
-type CreateCommunityResponse struct {
-	CommunityId int `json:"community_id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-	Description string `json:"description"`
-	Banner string `json:"banner"`
-	CreatedBy int `json:"created_by"`
-}
 
 type UpdateCommunityRequest struct {
 	Name string `json:"name"`
@@ -50,32 +36,55 @@ type FetchedCommunitiesData struct {
 func (app *Application) CreateCommunity(w http.ResponseWriter, r *http.Request) {
 	UserId := r.Context().Value(middleware.UserID).(int)
 
-	var createComm CreateCommunityRequest
-	err := helpers.ReadJSON(r, &createComm)
+	err := r.ParseMultipartForm(10 << 20)
 	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		app.errorLog.Printf("file size too large: %v", err)
+		http.Error(w, "File must not be more than 10mb", http.StatusBadRequest)
 		return
 	}
 
-	communityId, err := app.commRepo.CreateCommunity(createComm.Name, createComm.Slug, createComm.Description, createComm.Banner, UserId)
+	name := r.FormValue("name")
+    slug := r.FormValue("slug")
+    description := r.FormValue("description")
+	
+	if name == "" || slug == "" || description == "" {
+        http.Error(w, "title, body and community_id are required", http.StatusBadRequest)
+        return
+    }
+
+	bannerUrl := ""
+    file, _, err := r.FormFile("image")
+    if err == nil {
+        defer file.Close()
+        bannerUrl, err = helpers.UploadImage(file)
+        if err != nil {
+			app.errorLog.Printf("error uploading image: %v", err)
+            http.Error(w, "Image upload failed", http.StatusInternalServerError)
+            return
+        }
+    }
+
+	communityId, err := app.commRepo.CreateCommunity(name, slug, description, bannerUrl, UserId)
 	if err != nil {
+		app.errorLog.Printf("failed to create community: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	helpers.WriteJSON(w, http.StatusCreated, CreateCommunityResponse{
-		CommunityId: communityId,
-		Name: createComm.Name,
-		Slug: createComm.Slug,
-		Description: createComm.Description,
-		Banner: createComm.Banner,
-		CreatedBy: UserId,
+	helpers.WriteJSON(w, http.StatusCreated,  map[string]interface{}{
+        "message":      "Community Created Successfully",
+        "community_id":    communityId  ,
+        "name":        name,
+        "slug":         slug,
+        "image":    bannerUrl,
+        "created_by":    UserId,
 	})
 }
 
 func (app *Application) GetCommunityById(w http.ResponseWriter, r *http.Request) {
 	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Printf("invalid community id %v", err)
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
 	}
@@ -83,6 +92,7 @@ func (app *Application) GetCommunityById(w http.ResponseWriter, r *http.Request)
 
 	community, err := app.commRepo.GetCommunityById(communityId)
 	if err != nil {
+		app.errorLog.Printf("error getting community by id: %v", err)
 		http.Error(w, "Id not found", http.StatusNotFound)
 		return
 	}
@@ -101,6 +111,7 @@ func (app *Application) GetAllCommunities(w http.ResponseWriter, r *http.Request
 
 	allCommunities, metadata, err := app.commRepo.GetAllCommunities(filter)
 	if err != nil {
+		app.errorLog.Printf("error getting communities: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -121,12 +132,14 @@ func (app *Application) JoinCommunity(w http.ResponseWriter, r *http.Request) {
 
 	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Printf("invalid community id: %v", err)
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
 	}
 
 	err = app.commRepo.JoinACommunity(UserId, communityId, "member")
 	if err != nil {
+		app.errorLog.Printf("error joining community: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -139,12 +152,14 @@ func (app *Application) LeaveCommunity(w http.ResponseWriter, r *http.Request) {
 
 	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Printf("invalid community id: %v", err)
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
 	}
 
 	err = app.commRepo.LeaveACommunity(UserId, communityId)
 	if err != nil {
+		app.errorLog.Printf("error leaving a community: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -157,23 +172,27 @@ func (app *Application) DeleteCommunity(w http.ResponseWriter, r *http.Request) 
 
 	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Printf("invalid community id: %v", err)
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
 	}
 
 	community, err := app.commRepo.GetCommunityById(communityId)
 	if err != nil {
+		app.errorLog.Printf("error getting community by id: %v", err)
 		http.Error(w, "Id not found", http.StatusNotFound)
 		return
 	}
 
 	if community.CreatedBy != UserId {
+		app.errorLog.Printf("forbidden: %v", err)
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
 	err = app.commRepo.DeleteACommunity(communityId)
 	if err != nil {
+		app.errorLog.Printf("error deletig community: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -186,31 +205,64 @@ func (app *Application) UpdateCommunity(w http.ResponseWriter, r *http.Request) 
 
 	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Printf("invalid community id: %v", err)
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
 	}
 
-	var cm  UpdateCommunityRequest
-	err = helpers.ReadJSON(r, &cm)
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
+	err = r.ParseMultipartForm(10 << 20)
+    if err != nil {
+        r.ParseForm()
+    }
+
+	name := r.FormValue("name")
+    slug := r.FormValue("slug")
+    description := r.FormValue("description")
 
 	comm, err := app.commRepo.GetCommunityById(communityId)
 	if err != nil {
+		app.errorLog.Printf("error getting community by id: %v", err)
 		http.Error(w, "Id not found", http.StatusNotFound)
 		return
 	}
 
 	if comm.CreatedBy != UserId {
+		app.errorLog.Printf("forbidden: %v", err)
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
+	bannerUrl := comm.Banner
+    file, _, err := r.FormFile("image")
+    if err == nil {
+        defer file.Close()
+        bannerUrl, err = helpers.UploadImage(file)
+        if err != nil {
+            http.Error(w, "Image upload failed", http.StatusInternalServerError)
+            return
+        }
+    }
 
-	err = app.commRepo.UpdateACommunity(&community.Community{ID: comm.ID, Name: cm.Name, Slug: cm.Slug, Description: cm.Description, Banner: cm.Banner})
+	if name == "" {
+        name = comm.Name
+    }
+    if slug == "" {
+        slug = comm.Slug
+    }
+    if description == "" {
+        description = comm.Description
+    }
+
+    err = app.commRepo.UpdateACommunity(&community.Community{
+        ID:          comm.ID,
+        Name:        name,
+        Slug:        slug,
+        Description: description,
+        Banner:      bannerUrl,
+    })
+	
 	if err != nil {
+		app.errorLog.Printf("error updating community: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -221,12 +273,14 @@ func (app *Application) UpdateCommunity(w http.ResponseWriter, r *http.Request) 
 func (app *Application) GetAllCommunityMembers(w http.ResponseWriter, r *http.Request) {
 	communityId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
+		app.errorLog.Printf("invalid community id: %v", err)
 		http.Error(w, "Invalid Community Id", http.StatusBadRequest)
 		return
 	}
 
 	allMembers, err := app.commRepo.GetAllCommunityMembers(communityId)
 	if err != nil {
+		app.errorLog.Printf("error getting community members: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

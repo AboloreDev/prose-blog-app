@@ -15,5 +15,6 @@ type Profile struct {
 	UserId int `json:"user_id"`
 	Bio string `json:"bio"`
 	Karma string `json:"karma"`
+	Avatar_url string `json:"avatar_url"`
 }
 

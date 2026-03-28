@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 )
 
 var ErrNoRowsAvailable = errors.New("No rows available")
@@ -41,7 +42,7 @@ func calculateMetaData(totalRecords, page, pageSize int) MetaData {
 }
 
 type PostRepository interface {
-	CreatePost(userId int, title string, body string, communityId int, status string) (int, error)
+	CreatePost(userId int, title string, body string, image_url string, communityId int, status string, publishAt *time.Time) (int, error)
 	GetPostById(id int) (*PostDetails, error)
 	GetAllPost(filter Filter) ([]PostDetails, MetaData, error)
 	GetPostByCommunity(communityId int, filter Filter) ([]PostDetails, MetaData, error)
@@ -65,13 +66,13 @@ func NewSQLPostRepository(db *sql.DB) PostRepository {
 	}
 }
 
-func (r *SQLPostRepository) CreatePost(userId int, title string, body string, communityId int, status string) (int, error) {
+func (r *SQLPostRepository) CreatePost(userId int, title string, body string, image_url string, communityId int, status string, publishAt *time.Time) (int, error) {
 	statement := `
-		INSERT INTO posts (user_id, title, body, community_id, status) 
-		VALUES ($1, $2, $3, $4, $5) RETURNING id
+		INSERT INTO posts (user_id, title, body, image_url, community_id, status, publish_at) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
 	`
 	var postId int
-	row := r.db.QueryRow(statement, userId, title, body, communityId, status)
+	row := r.db.QueryRow(statement, userId, title, body, image_url, communityId, status, publishAt)
 
 	err := row.Scan(&postId)
 	if err != nil {
@@ -83,7 +84,7 @@ func (r *SQLPostRepository) CreatePost(userId int, title string, body string, co
 
 func (r *SQLPostRepository) GetPostById(id int) (*PostDetails, error) {
 	queryStatement := `
-		SELECT p.id, p.user_id, p.community_id, p.title, p.body, 
+		SELECT p.id, p.user_id, p.community_id, p.title, p.image_url, p.body, 
 		p.status, p.view_count, p.created_at, p.updated_at,
 		u.username AS author,
 		c.name AS community_name,
@@ -105,6 +106,7 @@ func (r *SQLPostRepository) GetPostById(id int) (*PostDetails, error) {
 		&postDetails.UserID, 
 		&postDetails.CommunityID,
 		&postDetails.Title,
+		&postDetails.Image_url,
 		&postDetails.Body,
 		&postDetails.Status,
 		&postDetails.ViewCount,
@@ -133,7 +135,7 @@ func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, 
 
 	queryStatement := `
 	SELECT COUNT(*) OVER() AS total_records,
-	p.id, p.user_id, p.title, p.body, p.created_at, p.view_count,
+	p.id, p.user_id, p.title, p.body, p.created_at, p.image_url, p.view_count,
 	u.username AS author, com.name AS community_name,
 	COUNT(DISTINCT v.user_id) AS vote_count,
 	COUNT(DISTINCT c.id) AS comment_count
@@ -177,7 +179,7 @@ func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, 
 	for rows.Next() {
 		var post PostDetails
 		err := rows.Scan(
-			&totalRecords, &post.ID, &post.UserID, &post.Title, &post.Body, &post.CreatedAt, 
+			&totalRecords, &post.ID, &post.UserID, &post.Title, &post.Body, &post.CreatedAt, &post.Image_url,
 			&post.ViewCount, &post.Author, &post.CommunityName, &post.VotesCount, &post.CommentCount)
 		if err != nil {
 			return nil, MetaData{}, err
@@ -208,7 +210,7 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
 		p.id, p.title, p.user_id, p.community_id, p.body, 
-		p.view_count, p.created_at,
+		p.image_url, p.view_count, p.created_at,
 		u.username AS author, cm.name AS community_name,
 		COUNT(DISTINCT v.user_id) AS vote_count,
 		COUNT(DISTINCT c.id) AS comment_count
@@ -221,6 +223,7 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
 	`
 
 	var args []interface{}
+	args = append(args, communityId)
 	argPos := 2
 
 	if filter.Query != "" {
@@ -246,12 +249,13 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
     return nil, MetaData{}, err
 	}
 	defer rows.Close()
+
 	var totalRecords int
 	var posts []PostDetails 
 	for rows.Next() {
 		var post PostDetails
 		err = rows.Scan(
-			&totalRecords, &post.ID, &post.Title, &post.UserID, &post.CommunityID, &post.Body,
+			&totalRecords, &post.ID, &post.Title, &post.UserID, &post.CommunityID, &post.Body, &post.Image_url,
 			&post.ViewCount, &post.CreatedAt, &post.Author, &post.CommunityName, &post.VotesCount,
 			&post.CommentCount,
 		)
@@ -282,7 +286,7 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
-		p.id, p.user_id, p.community_id, p.title, p.body, p.view_count,
+		p.id, p.user_id, p.community_id, p.title, p.body, p.view_count, p.image_url,
 		p.created_at, u.username AS author, cm.name AS community_name,
 		COUNT(DISTINCT v.user_id) AS votes_count,
 		COUNT(DISTINCT c.id) AS comments_count
@@ -295,6 +299,7 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 	`
 
 	var args []interface{}
+	args = append(args, userId)
 	argPos := 2
 
 	if filter.Query != "" {
@@ -327,7 +332,7 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 		var post PostDetails 
 		err = rows.Scan(
 			&totalRecords, &post.ID, &post.UserID, &post.CommunityID, &post.Title, &post.Body,
-			&post.ViewCount, &post.CreatedAt, &post.Author, &post.CommunityName, &post.VotesCount,
+			&post.ViewCount, &post.Image_url, &post.CreatedAt, &post.Author, &post.CommunityName, &post.VotesCount,
 			&post.CommentCount,
 		)
 
@@ -373,11 +378,11 @@ func (r *SQLPostRepository) DeletePost(id int) error {
 
 func (r *SQLPostRepository) UpdatePost(post *Post) error {
 	queryStatement := `
-		UPDATE posts SET title = $1, body = $2, updated_at = NOW() 
-		WHERE id = $3
+		UPDATE posts SET title = $1, body = $2, image_url = $3, updated_at = NOW() 
+		WHERE id = $4
 	`
 
-	_, err := r.db.Exec(queryStatement, post.Title, post.Body, post.ID)
+	_, err := r.db.Exec(queryStatement, post.Title, post.Body, post.Image_url, post.ID)
 	if err != nil {
 		return err
 	}
@@ -393,7 +398,7 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
-		p.id, p.user_id, p.community_id, p.title, p.body, p.created_at, p.status,
+		p.id, p.user_id, p.community_id, p.title, p.image_url, p.body, p.created_at, p.status,
 		u.username AS author, cm.name AS community_name
 		FROM posts AS p
 		INNER JOIN users AS u ON p.user_id = u.id
@@ -402,6 +407,7 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 	`
 
 	var args []interface{}
+	args = append(args, userId)
 	argPos := 2
 
 	if filter.Query != "" {
@@ -434,7 +440,8 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 		var post PostDetails
 		err := rows.Scan(
 			&totalRecords, &post.ID, &post.UserID, &post.CommunityID, 
-			&post.Title, &post.Body, &post.CreatedAt, &post.Status, &post.Author, &post.CommunityName)
+			&post.Title, &post.Image_url, &post.Body, &post.CreatedAt, 
+			&post.Status, &post.Author, &post.CommunityName)
 
 		if err != nil {
 			return  nil, MetaData{}, err
@@ -465,7 +472,8 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 
 	queryStatement := `
 		SELECT COUNT(*) OVER() AS total_records,
-		p.id, p.user_id, p.community_id, p.title, p.body, p.created_at, p.status,
+		p.id, p.user_id, p.community_id, p.title, p.image_url, 
+		p.body, p.created_at, p.status, p.publish_at,
 		u.username AS author, cm.name AS community_name
 		FROM posts AS p
 		INNER JOIN users AS u ON p.user_id = u.id
@@ -474,6 +482,7 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 	`
 
 	var args []interface{}
+	args = append(args, userId)
 	argPos := 2
 
 	if filter.Query != "" {
@@ -506,7 +515,8 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 		var post PostDetails
 		err := rows.Scan(
 			&totalRecords, &post.ID, &post.UserID, &post.CommunityID, 
-			&post.Title, &post.Body, &post.CreatedAt, &post.Status, &post.Author, &post.CommunityName)
+			&post.Title, &post.Image_url, &post.Body, &post.CreatedAt, 
+			&post.Status, &post.PublishAt, &post.Author, &post.CommunityName)
 
 		if err != nil {
 			return  nil, MetaData{}, err
@@ -559,7 +569,7 @@ func (r *SQLPostRepository) IncrementViewCount(postId int) error{
 
 func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
     statement := `
-        SELECT id, user_id, title, publish_at
+        SELECT id, user_id, title, image_url, publish_at
         FROM posts
         WHERE status = 'scheduled'
         AND publish_at > NOW()
@@ -578,6 +588,7 @@ func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
             &post.ID,
             &post.UserID,
             &post.Title,
+			&post.Image_url,
             &post.PublishAt,
         )
         if err != nil {

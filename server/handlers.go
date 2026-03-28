@@ -35,7 +35,7 @@ func (app *Application) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := app.userRepo.CreateUser(register.Username, register.Email, register.Password, "", 0)
+	userID, err := app.userRepo.CreateUser(register.Username, register.Email, register.Password, "", "", 0)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			http.Error(w, "Email Already Exists", http.StatusConflict)
@@ -235,3 +235,4 @@ func (app *Application) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		UserID: refreshToken.UserId,
 	})
 }
+
