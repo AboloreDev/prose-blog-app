@@ -28,7 +28,7 @@ type UpdateCommunityResponse struct {
 
 type FetchedCommunitiesData struct {
 	Communities []community.Community
-	MetaData community.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
@@ -102,7 +102,7 @@ func (app *Application) GetCommunityById(w http.ResponseWriter, r *http.Request)
 
 func (app *Application) GetAllCommunities(w http.ResponseWriter, r *http.Request) {
 
-	filter := community.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),

@@ -5,6 +5,7 @@ import (
 	"prose-blog/comments"
 	"prose-blog/helpers"
 	"prose-blog/middleware"
+	"prose-blog/notifications"
 	"strconv"
 )
 
@@ -24,7 +25,7 @@ type CreateCommentResponse struct {
 
 type FetchedCommentsData struct {
 	Comments []comments.Comments
-	MetaData comments.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
@@ -65,6 +66,28 @@ func (app *Application) CreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	notificationType := "new_comment"
+	if post.UserID != userId {
+		user, err := app.userRepo.GetUserById(userId)
+		if err != nil {
+			app.errorLog.Println(err)
+			http.Error(w, "You cant send notifcation to yourself", http.StatusBadRequest)
+			return
+		} else {
+			message := helpers.BuildNotificationMessage(notificationType, user.Username)
+			app.notificationWorker.Send(notifications.NotificationJob{
+				Message: message,
+				SenderID: userId,
+				ReceiverID: post.UserID,
+				SenderName: user.Username,
+				ReceiverName: post.Author,
+				CommentID: &commentId,
+				PostID: &postId,
+			})
+			app.infoLog.Printf("Notification sent to user %v, %s", post.UserID, post.Author)
+		}
+	}
+
 	helpers.WriteJSON(w, http.StatusCreated, CreateCommentResponse{
 		Message: "Comment Created Successfully",
 		PostId: postId,
@@ -82,7 +105,7 @@ func (app *Application) GetCommentsByPost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	filter := comments.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -193,7 +216,7 @@ func (app *Application) GetNestedComments(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	filter := comments.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),

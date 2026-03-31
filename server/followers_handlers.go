@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"prose-blog/helpers"
 	"prose-blog/middleware"
+	"prose-blog/notifications"
 	"strconv"
 )
 
@@ -26,6 +27,25 @@ func (app *Application) FollowUser(w http.ResponseWriter, r *http.Request) {
         app.errorLog.Println(err)
         http.Error(w, "Internal Server Error", http.StatusInternalServerError)
         return
+    }
+
+    notificatipnType := "new_follower" 
+    if followingID != followerID {
+        user, err := app.userRepo.GetUserById(followerID)
+        if err != nil {
+            app.errorLog.Println(err)
+			http.Error(w, "You cant send notifcation to yourself", http.StatusBadRequest)
+			return
+        } else {
+            message := helpers.BuildNotificationMessage(notificatipnType, user.Username)
+            app.notificationWorker.Send(notifications.NotificationJob{
+                Message: message,
+                SenderID: followerID,
+                ReceiverID: followingID,
+                SenderName: user.Username,
+            })
+            app.infoLog.Println("Notification sent")
+        }
     }
 
     helpers.WriteJSON(w, http.StatusOK, map[string]string{

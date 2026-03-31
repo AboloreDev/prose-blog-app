@@ -11,19 +11,19 @@ import (
 
 type FetchedPostData struct {
 	Posts []posts.PostDetails
-	MetaData posts.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
 type FetchedCommunityPostData struct {
 	CommunityPosts []posts.PostDetails
-	MetaData posts.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
 type FetchedUserPostData struct {
 	UserPosts []posts.PostDetails
-	MetaData posts.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
@@ -163,7 +163,7 @@ func (app *Application) CreatePost(w http.ResponseWriter, r *http.Request) {
 
 func (app *Application) Homepage(w http.ResponseWriter, r *http.Request) {
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -253,7 +253,7 @@ func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -282,7 +282,7 @@ func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Reques
 func (app *Application) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -371,7 +371,7 @@ func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 func (app *Application) GetUserPostsDraft(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -399,7 +399,7 @@ func (app *Application) GetUserPostsDraft(w http.ResponseWriter, r *http.Request
 func (app *Application) GetUserScheduledPosts(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),

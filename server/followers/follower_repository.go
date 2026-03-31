@@ -1,6 +1,7 @@
 package followers
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -43,7 +44,10 @@ func (r *SQLFollowersRepository) FollowUser(followerId, followingId int) error {
 		INSERT INTO followers (follower_id, following_id) VALUES ($1, $2)
 	`
 
-	_, err := r.db.Exec(queryStatement, followerId, followingId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	
+	_, err := r.db.ExecContext(ctx, queryStatement, followerId, followingId)
 	if err != nil {
 		return err
 	}
@@ -56,7 +60,10 @@ func (r *SQLFollowersRepository) UnfollowUser(followerId, followingId int) error
 	DELETE FROM followers 
 	WHERE follower_id = $1 AND following_id = $2`
 
-	_, err := r.db.Exec(queryStatement, followerId, followingId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err := r.db.ExecContext(ctx, queryStatement, followerId, followingId)
 	if err != nil {
 		return err
 	}
@@ -75,7 +82,10 @@ func (r *SQLFollowersRepository) GetFollowers(followingId int) ([]Followers, err
 		ORDER BY f.created_at, u.username
 	`
 
-	rows, err := r.db.Query(queryStatement, followingId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, followingId)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +124,10 @@ func (r *SQLFollowersRepository) GetFollowing(followerId int) ([]Followers, erro
 		ORDER BY f.created_at
 	`
 
-	rows, err := r.db.Query(queryStatement, followerId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, followerId)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +161,11 @@ func (r *SQLFollowersRepository) IsFollowing(followerID, followingID int) (bool,
         WHERE follower_id = $1 AND following_id = $2
     `
     var count int
-    err := r.db.QueryRow(statement, followerID, followingID).Scan(&count)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+    err := r.db.QueryRowContext(ctx, statement, followerID, followingID).Scan(&count)
     if err != nil {
         return false, err
     }
@@ -164,7 +181,11 @@ func (r *SQLFollowersRepository) GetFollowCount(userID int) (*FollowCount, error
     	`
 
     var count FollowCount
-    err := r.db.QueryRow(statement, userID, userID).Scan(
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+    err := r.db.QueryRowContext(ctx, statement, userID, userID).Scan(
         &count.FollowerCount,
         &count.FollowingCount,
     )
