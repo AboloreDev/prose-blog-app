@@ -202,11 +202,12 @@ func (app *Application) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helpers.WriteJSON(w, http.StatusOK, post)
-
 	go func (){
 		app.postRepo.IncrementViewCount(id)
 	}()
+	
+	helpers.WriteJSON(w, http.StatusOK, post)
+
 }
 
 func (app *Application) DeletePost(w http.ResponseWriter, r *http.Request) {

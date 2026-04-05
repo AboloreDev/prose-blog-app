@@ -20,6 +20,7 @@ type NotificationWorker struct {
 	queueChan chan NotificationJob
 	repo NotificationRepository
 	stopChan chan struct{}
+	
 }
 
 func NewNotificationWorker(repo NotificationRepository) *NotificationWorker {
@@ -31,28 +32,33 @@ func NewNotificationWorker(repo NotificationRepository) *NotificationWorker {
 }
 
 func (nw *NotificationWorker) Start() {
-	go func() {
-		for {
-			select{
-			case job := <- nw.queueChan:
-				_, err := nw.repo.CreateNotification(
-					job.ReceiverID,
-					job.SenderID,
-					job.Message,
-					job.NotificationType,
-					job.PostID,
-					job.CommentID,
-				)
-				if err != nil {
-					fmt.Println("Notification creation failed")
-					return
-				}
-				fmt.Println("Notification Created")
-			case <- nw.stopChan:
-				return
-			}
-		}
-	}()
+    // drain any stale jobs first
+    for len(nw.queueChan) > 0 {
+        <-nw.queueChan
+    }
+
+    go func() {
+        for {
+            select {
+            case job := <-nw.queueChan:
+                _, err := nw.repo.CreateNotification(
+                    job.ReceiverID,
+                    job.SenderID,
+                    job.Message,
+                    job.NotificationType,
+                    job.PostID,
+                    job.CommentID,
+                )
+                if err != nil {
+                    fmt.Printf("notification creation failed: %v", err)
+                    continue
+                }
+                fmt.Println("notification created")
+            case <-nw.stopChan:
+                return
+            }
+        }
+    }()
 }
 
 func (nw *NotificationWorker) Stop() {
@@ -65,9 +71,7 @@ func (nw *NotificationWorker) Send(job NotificationJob) {
 			select {
 			case nw.queueChan <- job:
 	
-			default: {
-				fmt.Println("Queue has been filled, still sending!")
-			}
+			default: 
 			}
 		}
 	}()

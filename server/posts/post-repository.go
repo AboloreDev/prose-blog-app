@@ -117,7 +117,7 @@ func (r *SQLPostRepository) GetAllPost(filter helpers.Filter) ([]PostDetails, he
 
 	queryStatement := `
 	SELECT COUNT(*) OVER() AS total_records,
-	p.id, p.user_id, p.title, p.body, p.created_at, p.image_url, p.view_count,
+	p.id, p.user_id, p.title, p.body, p.created_at, p.image_url, p.view_count, p.community_id,
 	u.username AS author, com.name AS community_name,
 	COUNT(DISTINCT v.user_id) AS vote_count,
 	COUNT(DISTINCT c.id) AS comment_count
@@ -165,7 +165,7 @@ func (r *SQLPostRepository) GetAllPost(filter helpers.Filter) ([]PostDetails, he
 		var post PostDetails
 		err := rows.Scan(
 			&totalRecords, &post.ID, &post.UserID, &post.Title, &post.Body, &post.CreatedAt, &post.Image_url,
-			&post.ViewCount, &post.Author, &post.CommunityName, &post.VotesCount, &post.CommentCount)
+			&post.ViewCount, &post.CommunityID, &post.Author, &post.CommunityName, &post.VotesCount, &post.CommentCount)
 		if err != nil {
 			return nil, helpers.MetaData{}, err
 		}

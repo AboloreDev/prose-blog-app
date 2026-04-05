@@ -1,0 +1,218 @@
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Bell,
+  ChevronDown,
+  Loader2,
+  LogOut,
+  Search,
+  Settings,
+  User,
+  X,
+} from "lucide-react";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import { useAppDispatch, useAppSelector, type RootState } from "@/state/redux";
+import { useLogoutUserMutation } from "@/state/api/authAp";
+import { logoutUser } from "@/state/slice/authSlice";
+import { Input } from "../ui/input";
+import { setSearchQuery } from "@/state/slice/globalSlice";
+import SearchBar from "./Searchbar";
+
+interface HeaderProps {
+  title: string;
+  subTitle?: string;
+}
+
+const Header = ({ title, subTitle }: HeaderProps) => {
+  const [open, setOpen] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const { user } = useAppSelector((state: RootState) => state.auth);
+  const location = useLocation();
+
+  const searchConfig: Record<string, string> = {
+    "/dashboard/feeds": "Search posts...",
+    "/dashboard/communities": "Search communities...",
+    "/dashboard/profile": "Search your posts...",
+  };
+
+  const searchPlaceholder = searchConfig[location.pathname];
+  const showSearch = !!searchPlaceholder;
+  const [logout, { isLoading: isLoggingOut }] = useLogoutUserMutation();
+
+  const initials = user?.username
+    ? user.username.slice(0, 2).toUpperCase()
+    : "?";
+
+  const handleLogoutConfirm = async () => {
+    try {
+      await logout(undefined).unwrap();
+    } finally {
+      dispatch(logoutUser());
+      navigate("/login");
+    }
+  };
+
+  return (
+    <div className="lato-regular">
+      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b px-4 py-3 ">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left — trigger + title */}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <SidebarTrigger className="shrink-0 xl:hidden lg:block" />
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold truncate leading-tight">
+                {title}
+              </h2>
+              {subTitle && (
+                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                  {subTitle}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Desktop search */}
+          {showSearch && (
+            <div className="hidden md:flex flex-1 max-w-sm mx-4">
+              <SearchBar placeholder={searchPlaceholder} />
+            </div>
+          )}
+
+          {/* Mobile search */}
+          {showSearch && (
+            <div className="md:hidden pt-2">
+              <SearchBar placeholder={searchPlaceholder} />
+            </div>
+          )}
+
+          {/* Right — bell + avatar */}
+          <div className="flex items-center gap-4 shrink-0">
+            {/* Notifications */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-9 w-9 rounded-full bg-white hover:bg-white/20"
+              //   onClick={() => navigate("/dashboard/notifications")}
+              aria-label="Notifications"
+            >
+              <Bell className="h-4 w-4" />
+              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-medium">
+                3
+              </span>
+            </Button>
+
+            {/* Avatar dropdown */}
+            <DropdownMenu open={open} onOpenChange={setOpen}>
+              <DropdownMenuTrigger className={"flex items-center gap-1"}>
+                <Avatar className="h-7 w-7">
+                  <AvatarImage
+                    src={user?.profile?.avatar_url}
+                    alt={user?.username}
+                  />
+                  <AvatarFallback className="text-xs bg-white">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 hidden sm:block ${open ? "rotate-180" : ""}`}
+                />
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                align="end"
+                className="w-52 bg-white rounded-md shadow-lg lato-regular"
+              >
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium truncate">
+                    {user?.username}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user?.email}
+                  </p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="gap-2 cursor-pointer"
+                  onClick={() => navigate("/dashboard/profile")}
+                >
+                  <User className="h-4 w-4" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 cursor-pointer"
+                  onClick={() => navigate("/dashboard/settings")}
+                >
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="gap-2 text-red-600 cursor-pointer focus:text-red-600"
+                  onClick={() => setShowLogoutDialog(true)}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+
+      {/* Logout dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out of Prose?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will need to log in again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoggingOut}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogoutConfirm}
+              disabled={isLoggingOut}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              {isLoggingOut ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Logging out...
+                </span>
+              ) : (
+                "Log out"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default Header;

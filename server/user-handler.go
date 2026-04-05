@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"prose-blog/community"
 	"prose-blog/helpers"
 	"prose-blog/middleware"
 	"prose-blog/users"
@@ -23,6 +24,11 @@ type UpdateUserResponse struct {
 
 type DeleteUserResponse struct {
 	Message string  `json:"message"`
+}
+
+type UserResponse struct {
+	User users.User
+	Communities community.Community
 }
 
 
@@ -79,7 +85,16 @@ func (app *Application) GetUserById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helpers.WriteJSON(w, http.StatusOK, user)
+	communities, err := app.commRepo.GetUserCommunities(userId)
+	if err != nil {
+		http.Error(w, "Invalid UserId", http.StatusInternalServerError)
+		return 
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"user":        user,
+		"communities": communities,
+	})
 }
 
 func (app *Application) DeleteUser(w http.ResponseWriter, r *http.Request) {

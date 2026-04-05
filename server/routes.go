@@ -107,6 +107,9 @@ func (app *Application) Routes() http.Handler {
     mux.Handle("DELETE /api/v1/communities/{id}/join",
         middleware.RequireAuth(http.HandlerFunc(app.LeaveCommunity)),
     )
+    mux.Handle("GET /api/v1/communities/{id}/user",
+        middleware.RequireAuth(http.HandlerFunc(app.GetUserCommunities)),
+    )
 
     // Preset Avatars
     mux.HandleFunc("GET /api/v1/avatars", app.GetPresetAvatars)

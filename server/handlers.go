@@ -230,9 +230,9 @@ func (app *Application) RefreshToken(w http.ResponseWriter, r *http.Request) {
     SameSite: http.SameSiteLaxMode,
 	})
 
-	helpers.WriteJSON(w, http.StatusOK, AuthResponse{
-		AccessToken: accessToken,
-		UserID: refreshToken.UserId,
+	helpers.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token": accessToken,
+		"user_id": refreshToken.UserId,
 	})
 }
 

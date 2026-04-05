@@ -14,9 +14,10 @@ var ErrDuplicateName = errors.New("Duplicate Community Name")
 var ErrDuplicateSlug = errors.New("Duplicate Community Slug") 
 var ErrNoRowsAvailable = errors.New("No Rows Available")
 var ErrInvalidPageRange = errors.New("invalid page range: 1 to 100 max")
+var ErrInvalidVisibilityType = errors.New("Invalid Visibility type")
 
 type CommunityRepository interface {
-	CreateCommunity(name, slug, description, banner string, createdBy int) (int, error)
+	CreateCommunity(name, slug, description, banner, visibility string, createdBy int) (int, error)
 	GetCommunityBySlug(communitySlug string) (*Community, error)
 	GetCommunityById(communityId int) (*Community, error)
 	GetAllCommunities(filter helpers.Filter) ([]Community, helpers.MetaData, error)
@@ -26,6 +27,7 @@ type CommunityRepository interface {
 	DeleteACommunity(communityId int) error 
 	UpdateACommunity(cm *Community) error 
 	IsMember(userId, communityId int) (bool, error)
+	GetUserCommunities(userId int) ([]Community, error) 
 }
 
 type SQLCommunityRepository struct {
@@ -37,17 +39,17 @@ func NewSQLCommunityRepository(db *sql.DB) CommunityRepository {
 }
 
 
-func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner string, createdBy int) (int, error) {
+func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner, visibility string, createdBy int) (int, error) {
 	queryStatement := `
-		INSERT INTO communities (name, slug, description, banner_url, created_by) 
-		VALUES ($1, $2, $3, $4, $5) RETURNING id
+		INSERT INTO communities (name, slug, description, banner_url, visibility, created_by) 
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
 	`
 
 	var communityId int
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
 	defer cancel()
-	row := r.db.QueryRowContext(ctx, queryStatement, name, slug, description, banner, createdBy)
+	row := r.db.QueryRowContext(ctx, queryStatement, name, slug, description, banner, visibility, createdBy)
 
 	err := row.Scan(&communityId)
 	if err != nil {
@@ -370,3 +372,41 @@ func (r *SQLCommunityRepository) IsMember(userId, communityId int) (bool, error)
     return count > 0, nil
 }
 
+func (r *SQLCommunityRepository) GetUserCommunities(userId int) ([]Community, error) {
+	queryStatement := `
+	SELECT c.id, c.name, c.slug, c.created_at, cm.role, cm.joined_at
+		FROM communities AS c
+		INNER JOIN community_members AS cm ON c.id = cm.community_id
+		WHERE cm.user_id = $1
+	`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	var communities []Community
+	for rows.Next() {
+		var community Community
+		err := rows.Scan(
+			&community.ID, &community.Name, &community.Slug, &community.CreatedAt, 
+			&community.Role, &community.JoinedAt,
+		)
+		if err != nil {
+		return nil, err
+		}
+
+		communities = append(communities, community)
+	}
+	
+	err = rows.Err()
+	if err == sql.ErrNoRows{
+		return nil, ErrNoRowsAvailable
+	}
+
+	return communities, nil
+
+}

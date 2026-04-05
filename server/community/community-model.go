@@ -10,9 +10,12 @@ type Community struct {
 	Banner string `json:"banner_url"`
 	CreatedAt time.Time `json:"created_at"`
 	MemberCount int `json:"member_count"`
+	Visibility string `json:"visibility"`
 	CreatedBy int `json:"created_by"`
 	CommunityCreator string `json:"community_creator"`
 	TotalRecords int `json:"total_records"`
+	Role string `json:"role"`
+	JoinedAt time.Time `json:"joined_at"`
 }
 
 type CommunityMember struct {

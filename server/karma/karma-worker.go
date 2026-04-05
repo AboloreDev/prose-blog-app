@@ -1,7 +1,6 @@
 package karma
 
 import (
-	"fmt"
 	"log"
 	"prose-blog/users"
 	"time"
@@ -93,7 +92,7 @@ func (kw *KarmaWorker) Send(event KarmaEvent){
 			kw.infoLog.Printf("Sending event to the queue channel %v", event)
 
 		default:
-			fmt.Println("Karam queue full but still sending")
+			
 		}
 	}()
 }
