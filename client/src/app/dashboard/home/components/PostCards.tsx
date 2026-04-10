@@ -10,7 +10,6 @@ import {
   SquareArrowUp,
   SquareArrowDown,
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,8 +40,9 @@ const PostCard = ({ post }: PostCardProps) => {
   const [joinCommunity, { isLoading: isJoining }] = useJoinCommunityMutation();
   const [localVotes, setLocalVotes] = useState(post.votes_count);
   const [userVote, setUserVote] = useState<"up" | "down" | null>(null);
-  const { data: communityDetails, isLoading: isLoadingCommunity } =
-    useGetCommunityByIdQuery(post.community_id);
+  const { data: communityDetails } = useGetCommunityByIdQuery(
+    post.community_id,
+  );
 
   const joinedIds = useAppSelector(
     (state: RootState) => state.auth.joinedCommunityIds,
@@ -99,7 +99,7 @@ const PostCard = ({ post }: PostCardProps) => {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <img
-            src={communityDetails?.banner_url}
+            src={communityDetails?.banner_url || "/community.png"}
             alt="Community Banner"
             className="h-6 w-6 object-cover rounded-md"
           />
@@ -114,7 +114,13 @@ const PostCard = ({ post }: PostCardProps) => {
           </button>
           <span className="text-xs text-muted-foreground">•</span>
           <span className="text-xs text-muted-foreground">{timeAgo}</span>
-          <span className="text-xs text-muted-foreground">
+          <span
+            className="text-xs text-muted-foreground"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/dashboard/profile/${post.user_id}`);
+            }}
+          >
             by {post.author}
           </span>
         </div>

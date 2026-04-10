@@ -4,7 +4,7 @@ import type { RootState } from "@/state/redux";
 import { useGetAllPostsQuery } from "@/state/api/postsApi";
 import { Button } from "@/components/ui/button";
 import { Loader2, ServerCrash, Inbox } from "lucide-react";
-import { setMetadata, setPosts } from "@/state/slice/postSlice";
+import { setMetadata } from "@/state/slice/postSlice";
 import Header from "@/components/code/Header";
 import PostCard from "./components/PostCards";
 import { CreatePostCard } from "./components/create/CreatePostCard";
@@ -14,7 +14,7 @@ const Home = () => {
   const searchQuery = useAppSelector(
     (state: RootState) => state.global.searchQuery,
   );
-  const { posts, metadata } = useAppSelector((state: RootState) => state.posts);
+  const { metadata } = useAppSelector((state: RootState) => state.posts);
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, isFetching } = useGetAllPostsQuery({
     page,
@@ -23,17 +23,16 @@ const Home = () => {
     order_by: "",
   });
 
+  const posts = data?.Posts;
+
   useEffect(() => {
-    if (data?.Posts) {
-      dispatch(setPosts(data.Posts));
-    }
     if (data?.MetaData) {
       dispatch(setMetadata(data.MetaData));
     }
   }, [data, dispatch]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen">
       <Header title="Home" subTitle="Your feed" />
 
       <div className="flex-1 overflow-y-auto">
@@ -67,7 +66,7 @@ const Home = () => {
               )}
 
               {/* Empty state */}
-              {!isLoading && !isError && posts.length === 0 && (
+              {!isLoading && !isError && posts?.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 gap-3">
                   <Inbox className="h-10 w-10 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
@@ -77,7 +76,7 @@ const Home = () => {
               )}
 
               {/* Posts list */}
-              {!isLoading && !isError && posts.length > 0 && (
+              {!isLoading && !isError && posts && posts.length > 0 && (
                 <div className="flex flex-col space-y-6">
                   {posts.map((post) => (
                     <PostCard key={post.id} post={post} />

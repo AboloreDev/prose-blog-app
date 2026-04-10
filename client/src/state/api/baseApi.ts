@@ -14,22 +14,47 @@ const rawBaseQuery = fetchBaseQuery({
   },
 });
 
+let isRefreshing = false;
+let refreshPromise: Promise<any> | null = null;
+
 const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
   let result = await rawBaseQuery(args, api, extraOptions);
 
+  //  @ts-expect-error "<>"
   if (result.error?.status === 401 || result.error?.originalStatus === 401) {
-    const refreshResult = await rawBaseQuery(
-      { url: "/auth/refresh", method: "POST" },
-      api,
-      extraOptions,
-    );
+    console.log("401 triggered by:", args);
 
-    if (refreshResult.data) {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      refreshPromise = rawBaseQuery(
+        { url: "/auth/refresh", method: "POST" },
+        api,
+        extraOptions,
+        //  @ts-expect-error "<>"
+      ).finally(() => {
+        isRefreshing = false;
+        refreshPromise = null;
+      });
+    }
+
+    const refreshResult = await refreshPromise;
+
+    if (refreshResult?.data) {
       const { access_token } = refreshResult.data as { access_token: string };
       api.dispatch(setAccessToken(access_token));
 
-      // ✅ Simple retry - prepareHeaders will read the new token from Redux!
-      result = await rawBaseQuery(args, api, extraOptions);
+      const retryArgs =
+        typeof args === "string"
+          ? { url: args, headers: { authorization: `Bearer ${access_token}` } }
+          : {
+              ...args,
+              headers: {
+                ...(args.headers ?? {}),
+                authorization: `Bearer ${access_token}`,
+              },
+            };
+
+      result = await rawBaseQuery(retryArgs, api, extraOptions);
     } else {
       api.dispatch(logoutUser());
     }

@@ -340,14 +340,14 @@ func (r *SQLCommunityRepository) DeleteACommunity(communityId int) error {
 
 func (r *SQLCommunityRepository) UpdateACommunity(cm *Community) error {
 	queryStatement := `
-		UPDATE communities SET name = $1, slug = $2, description = $3, banner_url = $4
-		WHERE id = $5
+		UPDATE communities SET name = $1, slug = $2, description = $3, banner_url = $4, visibility = $5
+		WHERE id = $6
 	`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
 	defer cancel()
 
-	_, err := r.db.ExecContext(ctx, queryStatement, cm.Name, cm.Slug, cm.Description, cm.Banner, cm.ID)
+	_, err := r.db.ExecContext(ctx, queryStatement, cm.Name, cm.Slug, cm.Description, cm.Banner, cm.Visibility, cm.ID)
 	if err != nil {
 		return err
 	}

@@ -240,18 +240,16 @@ func (r *SQLUserRepository) DeleteUser(id int) error {
 
 
 func (r *SQLUserRepository) UpdateKarmaPoints(userID int, Delta int) error {
-	queryStatement := `
-		UPDATE users SET karma = karma + $1 
-		WHERE user_id = $2
-	`
+    queryStatement := `
+        UPDATE profiles SET karma = karma + $1
+        WHERE user_id = $2
+    `
+    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+    defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-	defer cancel()
-
-	_, err := r.db.ExecContext(ctx, queryStatement, userID, Delta)
-	if err != nil {
-		return  err
-	}
-
-	return nil
+    _, err := r.db.ExecContext(ctx, queryStatement, Delta, userID)
+    if err != nil {
+        return err
+    }
+    return nil
 }

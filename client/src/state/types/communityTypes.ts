@@ -1,3 +1,5 @@
+import type { Post } from "./postTypes";
+
 export interface Community {
   id: number;
   name: string;
@@ -9,6 +11,8 @@ export interface Community {
   created_by: number;
   community_creator: string;
   total_records: number;
+  visibility: string;
+  post: Post;
 }
 
 export interface CommunitiesResponse {
@@ -40,6 +44,7 @@ export interface CreateCommunityRequest {
   slug: string;
   description: string;
   image?: File;
+  visibility?: "public" | "private";
 }
 
 export interface UpdateCommunityRequest {
@@ -47,6 +52,7 @@ export interface UpdateCommunityRequest {
   slug?: string;
   description?: string;
   image?: File;
+  visibility?: "public" | "private";
 }
 
 export interface CommunityMember {

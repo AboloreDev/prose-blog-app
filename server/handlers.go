@@ -178,8 +178,10 @@ func (app *Application) LogoutUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	 app.infoLog.Println("RefreshToken called") 
 	token, err := r.Cookie("refresh_token")
 	if err != nil {
+		 app.infoLog.Println("no refresh_token cookie found") 
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -191,34 +193,42 @@ func (app *Application) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.infoLog.Printf("refresh token cookie found: %s", token.Value[:10])
+
 	if time.Now().After(refreshToken.ExpiresAt) {
+		app.errorLog.Printf("token expired %v", err)
     	http.Error(w, "Token expired", http.StatusUnauthorized)
     	return
 	}
 
 	newRefreshToken, err := auth.GenerateRefreshToken()
 	if err != nil {
+		app.errorLog.Printf("Failed to generate refresh token %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	accessToken, err := auth.GenerateAccessToken(refreshToken.UserId)
 	if err != nil {
+		app.errorLog.Printf("Failed to generate access token %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	err = app.authRepo.DeleteRefreshToken(token.Value)
 	if err != nil {
+		app.errorLog.Printf("Failed to delete refresh token %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	err = app.authRepo.SaveRefreshToken(refreshToken.UserId, newRefreshToken, time.Now().Add(7 * 24 * time.Hour))
 	if err != nil {
+		app.errorLog.Printf("Failed to save refresh token %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	 
 
 	http.SetCookie(w, &http.Cookie{
     Name:     "refresh_token",

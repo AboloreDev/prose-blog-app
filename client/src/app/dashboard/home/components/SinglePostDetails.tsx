@@ -1,33 +1,21 @@
-import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Flag, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGetPostByIdQuery } from "@/state/api/postsApi";
-import { useAppDispatch } from "@/state/redux";
 import PostSkeleton from "@/components/code/Skeleton/PostSkeleton";
 import PostHeader from "./PostHeader";
 import PostContent from "./PostContent";
 import PostActions from "./PostActions";
-import { clearCurrentPost, setCurrentPost } from "@/state/slice/postSlice";
 import PostSidebar from "./PostSidebar";
 import CommentInput from "./comments/CommentInput";
 import CommentsList from "./comments/CommentsList";
-import { useGetCommunityByIdQuery } from "@/state/api/communityApi";
 
 const SinglePostDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
   const postId = Number(id);
 
   const { data: post, isLoading, error } = useGetPostByIdQuery(postId);
-
-  useEffect(() => {
-    if (post) dispatch(setCurrentPost(post));
-    return () => {
-      dispatch(clearCurrentPost());
-    };
-  }, [post]);
 
   if (isLoading) return <PostSkeleton />;
   if (error || !post) return <ErrorState onBack={() => navigate(-1)} />;

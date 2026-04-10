@@ -228,6 +228,7 @@ func (app *Application) UpdateCommunity(w http.ResponseWriter, r *http.Request) 
 	name := r.FormValue("name")
     slug := r.FormValue("slug")
     description := r.FormValue("description")
+	visibility := r.FormValue("visibility")
 
 	comm, err := app.commRepo.GetCommunityById(communityId)
 	if err != nil {
@@ -263,12 +264,21 @@ func (app *Application) UpdateCommunity(w http.ResponseWriter, r *http.Request) 
         description = comm.Description
     }
 
+	if visibility == "" {
+		visibility = comm.Visibility
+	}
+
+	if visibility == "private" {
+		visibility = "private"
+	}
+
     err = app.commRepo.UpdateACommunity(&community.Community{
         ID:          comm.ID,
         Name:        name,
         Slug:        slug,
         Description: description,
         Banner:      bannerUrl,
+		Visibility:  visibility,
     })
 	
 	if err != nil {

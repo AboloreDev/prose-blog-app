@@ -1,613 +1,393 @@
-// components/CreateCommunity.tsx
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
 import {
-  Users,
   Globe,
   Lock,
-  Eye,
-  Hash,
   Upload,
-  X,
-  CheckCircle2,
+  Users,
+  Sparkles,
   ArrowRight,
-  Info,
+  ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  createCommunitySchema,
+  type CreateCommunityFormValues,
+} from "@/schema/communitySchema";
+import { useCreateCommunityMutation } from "@/state/api/communityApi";
 import Header from "@/components/code/Header";
 
-type VisibilityType = "public" | "restricted" | "private";
+const CreateCommunity = () => {
+  const [createCommunity, { isLoading }] = useCreateCommunityMutation();
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-interface CommunityForm {
-  name: string;
-  displayName: string;
-  description: string;
-  visibility: VisibilityType;
-  avatar: File | null;
-  banner: File | null;
-  tags: string[];
-}
-
-const visibilityOptions: {
-  value: VisibilityType;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-}[] = [
-  {
-    value: "public",
-    label: "Public",
-    description: "Anyone can view, post, and comment",
-    icon: Globe,
-  },
-  {
-    value: "restricted",
-    label: "Restricted",
-    description: "Anyone can view, but only members can post",
-    icon: Eye,
-  },
-  {
-    value: "private",
-    label: "Private",
-    description: "Only approved members can view and post",
-    icon: Lock,
-  },
-];
-
-export const CreateCommunity = () => {
-  const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [form, setForm] = useState<CommunityForm>({
-    name: "",
-    displayName: "",
-    description: "",
-    visibility: "public",
-    avatar: null,
-    banner: null,
-    tags: [],
+  const form = useForm<CreateCommunityFormValues>({
+    resolver: zodResolver(createCommunitySchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      description: "",
+      visibility: "public",
+    },
   });
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  const [tagInput, setTagInput] = useState("");
 
-  // Auto-generate name from display name
-  const handleDisplayNameChange = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      displayName: value,
-      name: value
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "")
-        .slice(0, 21),
-    }));
+  const watchedName = form.watch("name");
+  const watchedSlug = form.watch("slug");
+  const watchedDescription = form.watch("description");
+  const watchedVisibility = form.watch("visibility");
+
+  // Auto-generate slug from name
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    form.setValue("name", val, { shouldValidate: true });
+    const autoSlug = val
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/_+/g, "_");
+    form.setValue("slug", autoSlug, { shouldValidate: true });
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("Avatar must be less than 2MB");
-        return;
-      }
-      setForm((prev) => ({ ...prev, avatar: file }));
-      setAvatarPreview(URL.createObjectURL(file));
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const onSubmit = async (values: CreateCommunityFormValues) => {
+    const formData = new FormData();
+    formData.append("name", values.name);
+    formData.append("slug", values.slug);
+    formData.append("description", values.description);
+    formData.append("visibility", values.visibility);
+    if (imageFile) formData.append("image", imageFile);
+
+    try {
+      await createCommunity(formData).unwrap();
+      toast.success("Community created successfully!");
+      // navigate(`dashboard/communities/${values.slug}`);
+    } catch {
+      toast.error("Failed to create community. Please try again.");
     }
   };
-
-  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Banner must be less than 5MB");
-        return;
-      }
-      setForm((prev) => ({ ...prev, banner: file }));
-      setBannerPreview(URL.createObjectURL(file));
-    }
-  };
-
-  const addTag = () => {
-    if (
-      tagInput.trim() &&
-      !form.tags.includes(tagInput.trim()) &&
-      form.tags.length < 5
-    ) {
-      setForm((prev) => ({ ...prev, tags: [...prev.tags, tagInput.trim()] }));
-      setTagInput("");
-    }
-  };
-
-  const removeTag = (tag: string) => {
-    setForm((prev) => ({ ...prev, tags: prev.tags.filter((t) => t !== tag) }));
-  };
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    // API call here
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    navigate(`/dashboard/communities/${form.name}`);
-  };
-
-  const isStep1Valid =
-    form.displayName.length >= 3 && form.description.length >= 10;
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-12">
-      {/* Custom Header */}
-      <div className="bg-white border-b border-orange-200 sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Users className="h-5 w-5 text-orange-500" />
-                Create Community
-              </h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                Build your space in 2 simple steps
+    <div className="min-h-screen lato-regular">
+      <Header
+        title="Create Community"
+        subTitle="Build your space, set the rules"
+      />
+      {/* ── Body ── */}
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8 items-start">
+          {/* ── Left: Form ── */}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Community image */}
+            <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm">
+              <p className="text-sm font-semibold text-gray-700 mb-4">
+                Community Image
               </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <div
-                  className={`w-8 h-1.5 rounded-full ${step >= 1 ? "bg-orange-500" : "bg-gray-200"}`}
-                />
-                <div
-                  className={`w-8 h-1.5 rounded-full ${step >= 2 ? "bg-orange-500" : "bg-gray-200"}`}
-                />
-              </div>
-              <span className="text-sm text-gray-500 font-medium">
-                Step {step}/2
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Main Form */}
-          <div className="lg:col-span-8 space-y-6">
-            {step === 1 ? (
-              <div className="bg-white rounded-2xl border border-orange-200/60 shadow-sm overflow-hidden">
-                <div className="p-6 space-y-6">
-                  {/* Display Name */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700">
-                      Community Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      placeholder="What should we call this community?"
-                      value={form.displayName}
-                      onChange={(e) => handleDisplayNameChange(e.target.value)}
-                      className="h-12 text-lg border-gray-200 focus:border-orange-400 focus:ring-orange-200"
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="relative group cursor-pointer flex flex-col items-center justify-center border-2 border-dashed border-orange-200 rounded-2xl h-40 bg-orange-50/50 hover:bg-orange-100/40 transition-all overflow-hidden"
+              >
+                {imagePreview ? (
+                  <>
+                    <img
+                      src={imagePreview}
+                      alt="preview"
+                      className="absolute inset-0 w-full h-full object-cover"
                     />
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">
-                        This will be your public display name
-                      </span>
-                      <span
-                        className={`${form.displayName.length > 50 ? "text-red-500" : "text-gray-400"}`}
-                      >
-                        {form.displayName.length}/100
-                      </span>
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                      <Upload className="h-6 w-6 text-white" />
                     </div>
-                  </div>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-8 w-8 text-orange-300 mb-2" />
+                    <p className="text-sm text-orange-400">
+                      Click to upload community image
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PNG, JPG up to 5MB
+                    </p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageChange}
+              />
+            </div>
 
-                  {/* Auto-generated URL Name */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700">
-                      Community URL
-                    </Label>
-                    <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <span className="text-gray-500 font-medium">pr/</span>
-                      <span className="font-semibold text-gray-900">
-                        {form.name || "community-name"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Auto-generated from your display name. Cannot be changed
-                      later.
+            {/* Name + Slug */}
+            <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm space-y-5">
+              <p className="text-sm font-semibold text-gray-700">Identity</p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Community Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Artificial Intelligence"
+                  {...form.register("name")}
+                  onChange={handleNameChange}
+                  className="w-full rounded-xl border border-orange-200  px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 transition-all"
+                />
+                {form.formState.errors.name && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.name.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Slug
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-orange-400 font-medium">
+                    pr/
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="artificial_intelligence"
+                    {...form.register("slug")}
+                    className="w-full rounded-xl border border-orange-200 pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 transition-all"
+                  />
+                </div>
+                {form.formState.errors.slug && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.slug.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-700">
+                  Description
+                </p>
+                <span className="text-xs text-muted-foreground">
+                  {watchedDescription.length}/500
+                </span>
+              </div>
+              <textarea
+                rows={5}
+                placeholder="What is your community about? What kind of posts are welcome?"
+                {...form.register("description")}
+                className="w-full rounded-xl border border-orange-200 bg-orange-50/30 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 transition-all"
+              />
+              {form.formState.errors.description && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.description.message}
+                </p>
+              )}
+            </div>
+
+            {/* Visibility */}
+            <div className="bg-white rounded-2xl border border-orange-100 p-6 shadow-sm space-y-4">
+              <p className="text-sm font-semibold text-gray-700">Visibility</p>
+              <div className="grid md:grid-cols-2 gap-3">
+                {/* Public */}
+                <button
+                  type="button"
+                  onClick={() => form.setValue("visibility", "public")}
+                  className={`flex flex-col items-start gap-2 rounded-xl border-2 p-4 transition-all text-left ${
+                    watchedVisibility === "public"
+                      ? "border-orange-400 bg-orange-50"
+                      : "border-orange-100 hover:border-orange-200"
+                  }`}
+                >
+                  <div
+                    className={`rounded-full p-2 ${watchedVisibility === "public" ? "bg-orange-100" : "bg-gray-100"}`}
+                  >
+                    <Globe
+                      className={`h-4 w-4 ${watchedVisibility === "public" ? "text-orange-500" : "text-gray-400"}`}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">
+                      Public
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Anyone can view and join
                     </p>
                   </div>
+                </button>
 
-                  {/* Description */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700">
-                      Description <span className="text-red-500">*</span>
-                    </Label>
-                    <Textarea
-                      placeholder="What is this community about? Be specific so people know what to expect..."
-                      value={form.description}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
-                      className="min-h-[120px] resize-none border-gray-200 focus:border-orange-400 focus:ring-orange-200"
+                {/* Private */}
+                <button
+                  type="button"
+                  onClick={() => form.setValue("visibility", "private")}
+                  className={`flex flex-col items-start gap-2 rounded-xl border-2 p-4 transition-all text-left ${
+                    watchedVisibility === "private"
+                      ? "border-orange-400 bg-orange-50"
+                      : "border-orange-100 hover:border-orange-200"
+                  }`}
+                >
+                  <div
+                    className={`rounded-full p-2 ${watchedVisibility === "private" ? "bg-orange-100" : "bg-gray-100"}`}
+                  >
+                    <Lock
+                      className={`h-4 w-4 ${watchedVisibility === "private" ? "text-orange-500" : "text-gray-400"}`}
                     />
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">
-                        Minimum 10 characters
-                      </span>
-                      <span
-                        className={`${form.description.length > 480 ? "text-red-500" : "text-gray-400"}`}
-                      >
-                        {form.description.length}/500
-                      </span>
-                    </div>
                   </div>
-
-                  {/* Tags */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-semibold text-gray-700">
-                      Topics{" "}
-                      <span className="text-gray-400 font-normal">
-                        (optional)
-                      </span>
-                    </Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input
-                          placeholder="Add topics (e.g., technology, gaming)"
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && (e.preventDefault(), addTag())
-                          }
-                          className="pl-10 border-gray-200 focus:border-orange-400"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={addTag}
-                        disabled={!tagInput.trim() || form.tags.length >= 5}
-                      >
-                        Add
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {form.tags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="bg-orange-100 text-orange-700 hover:bg-orange-200 cursor-pointer"
-                          onClick={() => removeTag(tag)}
-                        >
-                          {tag}
-                          <X className="h-3 w-3 ml-1" />
-                        </Badge>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Add up to 5 topics to help people find your community
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">
+                      Private
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Invite only, posts hidden
                     </p>
                   </div>
-                </div>
-
-                {/* Step 1 Footer */}
-                <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex justify-end">
-                  <Button
-                    onClick={() => setStep(2)}
-                    disabled={!isStep1Valid}
-                    className="bg-orange-500 hover:bg-orange-600 text-white px-8"
-                  >
-                    Continue
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
+                </button>
               </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Visual Identity Card */}
-                <div className="bg-white rounded-2xl border border-orange-200/60 shadow-sm overflow-hidden">
-                  <div className="p-6 space-y-6">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <Upload className="h-4 w-4 text-orange-500" />
-                      Visual Identity
-                    </h3>
+            </div>
 
-                    {/* Banner Upload */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-gray-700">
-                        Banner Image
-                      </Label>
-                      <div className="relative">
-                        {bannerPreview ? (
-                          <div className="relative h-32 rounded-xl overflow-hidden group">
-                            <img
-                              src={bannerPreview}
-                              alt="Banner"
-                              className="w-full h-full object-cover"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setBannerPreview(null);
-                                setForm((prev) => ({ ...prev, banner: null }));
-                              }}
-                              className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <label className="flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed border-gray-200 hover:border-orange-300 hover:bg-orange-50/30 transition-colors cursor-pointer">
-                            <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                            <span className="text-sm text-gray-600">
-                              Upload banner (optional)
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              Recommended: 1920×384, max 5MB
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={handleBannerChange}
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
+            {/* Submit */}
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-6 text-sm font-semibold flex items-center justify-center gap-2 shadow-md shadow-orange-200 transition-all"
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  Creating...
+                </span>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Create Community
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </form>
 
-                    {/* Avatar Upload */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-gray-700">
-                        Community Avatar
-                      </Label>
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-20 w-20 border-2 border-orange-200">
-                          {avatarPreview ? (
-                            <AvatarImage src={avatarPreview} />
-                          ) : (
-                            <AvatarFallback className="bg-orange-100 text-orange-600 text-2xl font-bold">
-                              {form.displayName[0]?.toUpperCase() || "?"}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        <div className="flex-1">
-                          <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer transition-colors">
-                            <Upload className="h-4 w-4 text-gray-600" />
-                            <span className="text-sm font-medium text-gray-700">
-                              Upload avatar
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={handleAvatarChange}
-                            />
-                          </label>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Recommended: 256×256, max 2MB
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          {/* ── Right: Live Preview Sidebar ── */}
+          <div className="space-y-4 lg:sticky lg:top-24">
+            {/* Preview card */}
+            <div className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden">
+              {/* Banner */}
+              <div className="h-20 bg-gradient-to-br from-orange-300 via-orange-400 to-amber-400 relative">
+                {imagePreview && (
+                  <img
+                    src={imagePreview}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover opacity-40"
+                  />
+                )}
+              </div>
 
-                {/* Visibility Settings */}
-                <div className="bg-white rounded-2xl border border-orange-200/60 shadow-sm overflow-hidden">
-                  <div className="p-6 space-y-4">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <Eye className="h-4 w-4 text-orange-500" />
-                      Visibility Settings
-                    </h3>
-
-                    <div className="grid gap-3">
-                      {visibilityOptions.map((option) => {
-                        const Icon = option.icon;
-                        const isSelected = form.visibility === option.value;
-
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() =>
-                              setForm((prev) => ({
-                                ...prev,
-                                visibility: option.value,
-                              }))
-                            }
-                            className={`flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all ${
-                              isSelected
-                                ? "border-orange-500 bg-orange-50/50"
-                                : "border-gray-200 hover:border-orange-200 hover:bg-gray-50"
-                            }`}
-                          >
-                            <div
-                              className={`p-2 rounded-lg ${isSelected ? "bg-orange-100 text-orange-600" : "bg-gray-100 text-gray-500"}`}
-                            >
-                              <Icon className="h-5 w-5" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-gray-900">
-                                  {option.label}
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-4 w-4 text-orange-500" />
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-500 mt-0.5">
-                                {option.description}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 2 Footer */}
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setStep(1)}
-                    className="flex-1 h-12"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="flex-1 h-12 bg-orange-500 hover:bg-orange-600 text-white"
-                  >
-                    {isSubmitting ? (
-                      <span className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Creating...
+              {/* Avatar */}
+              <div className="px-4 pb-4">
+                <div className="relative -mt-8 mb-3">
+                  <div className="h-16 w-16 rounded-2xl border-4 border-white shadow-md bg-orange-100 overflow-hidden flex items-center justify-center">
+                    {imagePreview ? (
+                      <img
+                        src={imagePreview}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-2xl font-bold text-orange-400">
+                        {watchedName?.[0]?.toUpperCase() || "?"}
                       </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="font-bold text-gray-900 text-base leading-tight">
+                  {watchedName || "Community Name"}
+                </p>
+                <p className="text-xs text-orange-500 mb-2">
+                  pr/{watchedSlug || "slug"}
+                </p>
+                <p className="text-xs text-muted-foreground line-clamp-3">
+                  {watchedDescription ||
+                    "Your community description will appear here..."}
+                </p>
+
+                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-orange-50">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Users className="h-3.5 w-3.5" />
+                    <span>0 members</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {watchedVisibility === "private" ? (
+                      <>
+                        <Lock className="h-3.5 w-3.5" />
+                        <span>Private</span>
+                      </>
                     ) : (
                       <>
-                        Create Community
-                        <CheckCircle2 className="h-4 w-4 ml-2" />
+                        <Globe className="h-3.5 w-3.5" />
+                        <span>Public</span>
                       </>
                     )}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Preview Sidebar */}
-          <div className="lg:col-span-4">
-            <div className="sticky top-24 space-y-4">
-              <div className="bg-white rounded-2xl border border-orange-200/60 shadow-sm overflow-hidden">
-                <div className="p-4 bg-gray-50 border-b border-gray-100">
-                  <h3 className="font-semibold text-sm text-gray-700 flex items-center gap-2">
-                    <Info className="h-4 w-4" />
-                    Live Preview
-                  </h3>
-                </div>
-
-                <div className="p-4">
-                  {/* Mini Community Card Preview */}
-                  <div className="relative">
-                    {/* Banner Preview */}
-                    <div className="h-20 rounded-lg bg-gradient-to-r from-orange-100 to-orange-200 overflow-hidden">
-                      {bannerPreview && (
-                        <img
-                          src={bannerPreview}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                    </div>
-
-                    {/* Avatar Preview */}
-                    <div className="absolute -bottom-6 left-4">
-                      <Avatar className="h-16 w-16 border-4 border-white shadow-md">
-                        {avatarPreview ? (
-                          <AvatarImage src={avatarPreview} />
-                        ) : (
-                          <AvatarFallback className="bg-orange-500 text-white text-xl font-bold">
-                            {form.displayName[0]?.toUpperCase() || "?"}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                    </div>
-                  </div>
-
-                  {/* Community Info */}
-                  <div className="mt-8 space-y-2">
-                    <h4 className="font-bold text-gray-900 text-lg">
-                      {form.displayName || "Community Name"}
-                    </h4>
-                    <p className="text-sm text-gray-500 font-medium">
-                      pr/{form.name || "community"}
-                    </p>
-                    <p className="text-sm text-gray-600 line-clamp-3">
-                      {form.description ||
-                        "Community description will appear here..."}
-                    </p>
-
-                    <div className="flex items-center gap-4 pt-2 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3.5 w-3.5" />1 member
-                      </span>
-                      <span className="flex items-center gap-1">
-                        {form.visibility === "public" ? (
-                          <Globe className="h-3.5 w-3.5" />
-                        ) : form.visibility === "private" ? (
-                          <Lock className="h-3.5 w-3.5" />
-                        ) : (
-                          <Eye className="h-3.5 w-3.5" />
-                        )}
-                        {visibilityOptions.find(
-                          (v) => v.value === form.visibility,
-                        )?.label || "Public"}
-                      </span>
-                    </div>
-
-                    {form.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-2">
-                        {form.tags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="secondary"
-                            className="text-xs bg-gray-100 text-gray-600"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Mock Post Preview */}
-                  <div className="space-y-3 opacity-60">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gray-200" />
-                      <div className="h-3 w-24 bg-gray-200 rounded" />
-                    </div>
-                    <div className="h-4 w-full bg-gray-200 rounded" />
-                    <div className="h-4 w-2/3 bg-gray-200 rounded" />
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Tips Card */}
-              <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
-                <h4 className="font-semibold text-orange-800 text-sm mb-2">
-                  Tips for success
-                </h4>
-                <ul className="space-y-2 text-sm text-orange-700">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-                    Choose a clear, descriptive name
+            {/* Tips */}
+            <div className="bg-white rounded-2xl border border-orange-100 p-5 shadow-sm space-y-3">
+              <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-orange-400" />
+                Tips for a great community
+              </p>
+              <ul className="space-y-2.5">
+                {[
+                  "Pick a clear, memorable name",
+                  "Write a description that sets expectations",
+                  "Use a recognizable image",
+                  "Start public — you can go private later",
+                ].map((tip, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-xs text-muted-foreground"
+                  >
+                    <span className="mt-0.5 h-4 w-4 rounded-full bg-orange-100 text-orange-500 flex items-center justify-center font-semibold shrink-0 text-[10px]">
+                      {i + 1}
+                    </span>
+                    {tip}
                   </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-                    Add relevant topics for discoverability
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-                    Set appropriate visibility from the start
-                  </li>
-                </ul>
-              </div>
+                ))}
+              </ul>
+            </div>
+
+            {/* Visibility explainer */}
+            <div
+              className={`rounded-2xl border p-4 text-xs transition-all ${
+                watchedVisibility === "private"
+                  ? "bg-amber-50 border-amber-200 text-amber-700"
+                  : "bg-green-50 border-green-200 text-green-700"
+              }`}
+            >
+              {watchedVisibility === "private" ? (
+                <p>
+                  <span className="font-semibold">Private community:</span> Only
+                  members you invite can see posts and join.
+                </p>
+              ) : (
+                <p>
+                  <span className="font-semibold">Public community:</span>{" "}
+                  Anyone can discover, view posts and request to join.
+                </p>
+              )}
             </div>
           </div>
         </div>

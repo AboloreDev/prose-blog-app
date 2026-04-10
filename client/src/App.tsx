@@ -9,6 +9,13 @@ import Homepage from "./app/dashboard/home/Home";
 import SinglePostDetails from "./app/dashboard/home/components/SinglePostDetails";
 import AllCommunities from "./app/dashboard/community/All-Communities/AllCommunities";
 import CreateCommunity from "./app/dashboard/community/CreateCommunity/CreateCommunity";
+import SingleCommunityDetails from "./app/dashboard/community/All-Communities/SingleCommunityDetails";
+import NotFound from "./components/code/NotFound";
+import Drafts from "./app/dashboard/posts/drafts/Drafts";
+import Scheduled from "./app/dashboard/posts/scheduled/Scheduled";
+import Published from "./app/dashboard/posts/published/Published";
+import Profile from "./app/dashboard/profile/Profile";
+import Popular from "./app/dashboard/popular/Popular";
 
 const App = () => {
   const [showSplash, setShowSplash] = useState(() => {
@@ -33,6 +40,7 @@ const App = () => {
         {/* Protected dashboard routes */}
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardLayout />}>
+            <Route path="/dashboard/popular" element={<Popular />} />
             <Route path="/dashboard/feeds" element={<Homepage />} />
             <Route
               path="/dashboard/feeds/:id"
@@ -46,10 +54,21 @@ const App = () => {
               path="/dashboard/communities/create"
               element={<CreateCommunity />}
             />
+            <Route
+              path="/dashboard/communities/:id"
+              element={<SingleCommunityDetails />}
+            />
+
+            <Route path="/dashboard/posts/drafts" element={<Drafts />} />
+            <Route path="/dashboard/posts/scheduled" element={<Scheduled />} />
+            <Route path="/dashboard/posts/published" element={<Published />} />
+
+            <Route path="/dashboard/profile/:id" element={<Profile />} />
+            <Route path="/dashboard/profile" element={<Profile />} />
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to="#" />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

@@ -59,7 +59,7 @@ export const communityApi = baseApi.injectEndpoints({
         url: `/communities/${id}/join`,
         method: "POST",
       }),
-      invalidatesTags: ["Community"],
+      invalidatesTags: ["Community", "User"],
     }),
 
     leaveCommunity: builder.mutation<void, number>({
@@ -67,7 +67,7 @@ export const communityApi = baseApi.injectEndpoints({
         url: `/communities/${id}/join`,
         method: "DELETE",
       }),
-      invalidatesTags: ["Community"],
+      invalidatesTags: ["Community", "User"],
     }),
 
     getCommunityMembers: builder.query<CommunityMember[], number>({
@@ -79,10 +79,10 @@ export const communityApi = baseApi.injectEndpoints({
 
     getCommunityPosts: builder.query<
       CommunitiesResponse,
-      { page?: number; page_size?: number }
+      { page?: number; page_size?: number; id: number }
     >({
-      query: ({ page = 1, page_size = 10 }) => ({
-        url: `/posts`,
+      query: ({ page = 1, page_size = 10, id }) => ({
+        url: `/community-posts/${id}`,
         params: { page, page_size },
       }),
       providesTags: ["Post"],

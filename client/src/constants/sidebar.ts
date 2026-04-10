@@ -1,12 +1,9 @@
 import {
   HomeIcon,
   UsersIcon,
-  BellIcon,
   UserIcon,
   TrendingUpIcon,
-  SettingsIcon,
   FileTextIcon,
-  CalendarIcon,
   HelpCircleIcon,
 } from "lucide-react";
 
@@ -42,16 +39,12 @@ export const mainLinks: SidebarLink[] = [
     url: "/dashboard/posts",
     icon: FileTextIcon,
     children: [
-      { title: "Published", url: "/dashboard/posts" },
+      { title: "Published", url: "/dashboard/posts/published" },
       { title: "Drafts", url: "/dashboard/posts/drafts" },
       { title: "Scheduled", url: "/dashboard/posts/scheduled" },
     ],
   },
-  {
-    title: "Notifications",
-    url: "/dashboard/notifications",
-    icon: BellIcon,
-  },
+
   {
     title: "Profile",
     url: "/dashboard/profile",
@@ -60,11 +53,6 @@ export const mainLinks: SidebarLink[] = [
 ];
 
 export const secondaryLinks: SidebarLink[] = [
-  {
-    title: "Settings",
-    url: "/dashboard/settings",
-    icon: SettingsIcon,
-  },
   {
     title: "Help",
     url: "/dashboard/help",

@@ -8,14 +8,7 @@ export const userApi = baseApi.injectEndpoints({
         url: `/users/${id}`,
         method: "GET",
       }),
-    }),
-
-    updateUserProfile: builder.mutation<UserProfileResponse, FormData>({
-      query: (formData) => ({
-        url: "/users",
-        method: "PATCH",
-        body: formData,
-      }),
+      providesTags: ["User"],
     }),
 
     deleteUserAccount: builder.mutation<void, void>({
@@ -27,8 +20,4 @@ export const userApi = baseApi.injectEndpoints({
   }),
 });
 
-export const {
-  useGetUserProfileQuery,
-  useDeleteUserAccountMutation,
-  useUpdateUserProfileMutation,
-} = userApi;
+export const { useGetUserProfileQuery, useDeleteUserAccountMutation } = userApi;

@@ -25,22 +25,30 @@ type NotificationWorker struct {
 
 func NewNotificationWorker(repo NotificationRepository) *NotificationWorker {
 	return &NotificationWorker{
-		queueChan: make(chan NotificationJob, 100),
+		queueChan: make(chan NotificationJob, 10),
 		repo: repo,
 		stopChan: make(chan struct{}),
 	}
 }
 
 func (nw *NotificationWorker) Start() {
-    // drain any stale jobs first
     for len(nw.queueChan) > 0 {
-        <-nw.queueChan
+        <- nw.queueChan
     }
 
     go func() {
+		for {
+            select {
+            case <-nw.queueChan:
+            default:
+                goto done 
+            }
+        }
+        done:
+
         for {
             select {
-            case job := <-nw.queueChan:
+            case job := <- nw.queueChan:
                 _, err := nw.repo.CreateNotification(
                     job.ReceiverID,
                     job.SenderID,
@@ -54,7 +62,7 @@ func (nw *NotificationWorker) Start() {
                     continue
                 }
                 fmt.Println("notification created")
-            case <-nw.stopChan:
+            case <- nw.stopChan:
                 return
             }
         }
@@ -66,15 +74,10 @@ func (nw *NotificationWorker) Stop() {
 }
 
 func (nw *NotificationWorker) Send(job NotificationJob) {
-	go func() {
-		for {
-			select {
-			case nw.queueChan <- job:
-	
-			default: 
-			}
-		}
-	}()
+    select {
+    case nw.queueChan <- job:
+    default:
+    }
 }
 func (nw *NotificationWorker) DeleteNotificationAtInterval() {
 	ticker := time.NewTicker(4 * 24 * time.Hour)

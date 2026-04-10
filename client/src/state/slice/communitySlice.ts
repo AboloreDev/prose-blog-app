@@ -1,8 +1,9 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { Community } from "../types/communityTypes";
+import type { Community, MetaData } from "../types/communityTypes";
 
 interface CommunityState {
   communities: Community[];
+  communityMetadata: MetaData | null;
   currentCommunity: Community | null;
   joinedCommunityIds: number[];
   isLoading: boolean;
@@ -11,6 +12,7 @@ interface CommunityState {
 
 const initialState: CommunityState = {
   communities: [],
+  communityMetadata: null,
   currentCommunity: null,
   joinedCommunityIds: JSON.parse(
     sessionStorage.getItem("joinedCommunities") || "[]",
@@ -53,6 +55,9 @@ export const communitySlice = createSlice({
     setCommunityError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
+    setCommunityMetadata: (state, action: PayloadAction<MetaData | null>) => {
+      state.communityMetadata = action.payload;
+    },
   },
 });
 
@@ -63,6 +68,7 @@ export const {
   leaveCommunity,
   setCommunityLoading,
   setCommunityError,
+  setCommunityMetadata,
 } = communitySlice.actions;
 
 export default communitySlice.reducer;

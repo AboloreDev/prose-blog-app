@@ -35,6 +35,7 @@ export interface MetaData {
 }
 
 export interface PostsParams {
+  user_id?: number;
   page?: number;
   page_size?: number;
   query?: string;

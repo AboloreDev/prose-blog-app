@@ -28,6 +28,7 @@ type PostRepository interface {
 	PublishPost(postID int) error
 	IncrementViewCount(postId int) error
 	GetScheduledPosts() ([]PostDetails, error)
+	GetTrendingPosts(limit int) ([]PostDetails, error)
 }
 
 type SQLPostRepository struct{
@@ -617,4 +618,59 @@ func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
     }
 
     return scheduledPosts, nil
+}
+
+func (r *SQLPostRepository) GetTrendingPosts(limit int) ([]PostDetails, error) {
+    statement := `
+        SELECT 
+            p.id, p.user_id, p.community_id, p.title, p.body,
+            p.image_url, p.status, p.view_count, p.created_at, p.updated_at,
+            u.username AS author,
+            c.name AS community_name,
+            COUNT(DISTINCT v.user_id) AS votes_count,
+            COUNT(DISTINCT cm.id) AS comment_count,
+            (COUNT(DISTINCT v.user_id) + (COUNT(DISTINCT cm.id) * 2) + (p.view_count * 0.1)) AS score
+        FROM posts AS p
+        INNER JOIN users AS u ON p.user_id = u.id
+        INNER JOIN communities AS c ON p.community_id = c.id
+        LEFT JOIN votes AS v ON p.id = v.post_id
+        LEFT JOIN comments AS cm ON p.id = cm.post_id
+        WHERE p.status = 'published'
+        AND p.created_at > NOW() - INTERVAL '48 hours'
+        GROUP BY p.id, u.username, c.name
+        ORDER BY score DESC
+        LIMIT $1
+    `
+
+    rows, err := r.db.Query(statement, limit)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var posts []PostDetails
+    for rows.Next() {
+        var post PostDetails
+        var score float64
+        err := rows.Scan(
+            &post.ID, &post.UserID, &post.CommunityID,
+            &post.Title, &post.Body, &post.Image_url,
+            &post.Status, &post.ViewCount,
+            &post.CreatedAt, &post.UpdatedAt,
+            &post.Author, &post.CommunityName,
+            &post.VotesCount, &post.CommentCount,
+            &score,
+        )
+        if err != nil {
+            return nil, err
+        }
+        posts = append(posts, post)
+    }
+
+    err = rows.Err()
+    if err != nil {
+        return nil, err
+    }
+
+    return posts, nil
 }

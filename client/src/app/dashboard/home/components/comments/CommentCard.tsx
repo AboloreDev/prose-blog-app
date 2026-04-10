@@ -10,8 +10,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useVoteCommentMutation } from "@/state/api/commentsApi";
-import { useAppDispatch, useAppSelector } from "@/state/redux";
-import type { RootState } from "@/state/redux";
+import { useAppDispatch } from "@/state/redux";
+
 import CommentInput from "./CommentInput";
 import { useGetNestedCommentsQuery } from "@/state/api/commentsApi";
 import type { Comment } from "@/state/types/commentTypes";
@@ -29,10 +29,6 @@ const CommentCard = ({ comment, postId }: CommentCardProps) => {
   const [userVote, setUserVote] = useState<"up" | "down" | null>(null);
   const [showReplies, setShowReplies] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
-
-  const replyingTo = useAppSelector(
-    (state: RootState) => state.comments.replyingTo,
-  );
 
   const { data: replies, isLoading: repliesLoading } =
     useGetNestedCommentsQuery(

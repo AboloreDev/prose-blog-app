@@ -43,6 +43,7 @@ type Application struct {
 	scheduleList map[int]chan struct{}
 	schedulerMutex sync.Mutex
 	notificationWorker *notifications.NotificationWorker
+    notificationsRepo notifications.NotificationRepository
 	karmaWorker *karma.KarmaWorker
 }
 
@@ -85,6 +86,7 @@ func main() {
         scheduleList:       make(map[int]chan struct{}),
         notificationWorker: notificationWorker,
         karmaWorker:        karmaWorker,
+        notificationsRepo: notificationsRepo,
     }
 
     err = app.RestoreScheduledPosts()

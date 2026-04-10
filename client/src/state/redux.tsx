@@ -8,6 +8,9 @@ import authReducer from "./slice/authSlice";
 import globalReducer from "./slice/globalSlice";
 import postsReducer from "./slice/postSlice";
 import commentsReducer from "./slice/commentSlice";
+import communityReducer from "./slice/communitySlice";
+import profileReducer from "./slice/profileSlice";
+import notificationsReducer from "./slice/notificationsSlice";
 import { baseApi } from "./api/baseApi";
 
 const rootReducer = combineReducers({
@@ -15,6 +18,9 @@ const rootReducer = combineReducers({
   global: globalReducer,
   posts: postsReducer,
   comments: commentsReducer,
+  community: communityReducer,
+  profile: profileReducer,
+  notification: notificationsReducer,
   [baseApi.reducerPath]: baseApi.reducer,
 });
 

@@ -1,7 +1,6 @@
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -31,7 +30,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="flex-1 flex flex-col bg-[#E86B00]">
+      <SidebarContent className="flex-1 flex flex-col bg-[#E86B00] lato-regular">
         <NavMain />
         <NavSecondary className="mt-auto" />
       </SidebarContent>

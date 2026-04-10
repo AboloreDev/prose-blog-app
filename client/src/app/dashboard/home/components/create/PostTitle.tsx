@@ -6,11 +6,7 @@ interface PostTitleInputProps {
   error?: string;
 }
 
-export const PostTitleInput = ({
-  value,
-  onChange,
-  error,
-}: PostTitleInputProps) => {
+export const PostTitleInput = ({ value, onChange }: PostTitleInputProps) => {
   return (
     <div className="space-y-1 bg-white border-none">
       <div className="relative">

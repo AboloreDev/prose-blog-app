@@ -5,10 +5,8 @@ import {
   ChevronDown,
   Loader2,
   LogOut,
-  Search,
   Settings,
   User,
-  X,
 } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -34,9 +32,10 @@ import {
 import { useAppDispatch, useAppSelector, type RootState } from "@/state/redux";
 import { useLogoutUserMutation } from "@/state/api/authAp";
 import { logoutUser } from "@/state/slice/authSlice";
-import { Input } from "../ui/input";
-import { setSearchQuery } from "@/state/slice/globalSlice";
 import SearchBar from "./Searchbar";
+import { useGetUserProfileQuery } from "@/state/api/userApi";
+import { setNotificationsSheetOpen } from "@/state/slice/notificationsSlice";
+import NotificationsSheet from "./NotificationsSheet";
 
 interface HeaderProps {
   title: string;
@@ -49,6 +48,7 @@ const Header = ({ title, subTitle }: HeaderProps) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { user } = useAppSelector((state: RootState) => state.auth);
+  const { data: userProfile } = useGetUserProfileQuery({ id: user?.id ?? 0 });
   const location = useLocation();
 
   const searchConfig: Record<string, string> = {
@@ -60,6 +60,9 @@ const Header = ({ title, subTitle }: HeaderProps) => {
   const searchPlaceholder = searchConfig[location.pathname];
   const showSearch = !!searchPlaceholder;
   const [logout, { isLoading: isLoggingOut }] = useLogoutUserMutation();
+  const unreadCount = useAppSelector(
+    (state: RootState) => state.notification.unreadCount,
+  );
 
   const initials = user?.username
     ? user.username.slice(0, 2).toUpperCase()
@@ -70,7 +73,13 @@ const Header = ({ title, subTitle }: HeaderProps) => {
       await logout(undefined).unwrap();
     } finally {
       dispatch(logoutUser());
-      navigate("/login");
+      navigate("/auth/login");
+    }
+  };
+
+  const handleProfileNavigation = () => {
+    if (user?.id) {
+      navigate(`/dashboard/profile/${user.id}`);
     }
   };
 
@@ -114,13 +123,15 @@ const Header = ({ title, subTitle }: HeaderProps) => {
               variant="ghost"
               size="icon"
               className="relative h-9 w-9 rounded-full bg-white hover:bg-white/20"
-              //   onClick={() => navigate("/dashboard/notifications")}
+              onClick={() => dispatch(setNotificationsSheetOpen(true))}
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
-              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-medium">
-                3
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-medium">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </Button>
 
             {/* Avatar dropdown */}
@@ -128,7 +139,7 @@ const Header = ({ title, subTitle }: HeaderProps) => {
               <DropdownMenuTrigger className={"flex items-center gap-1"}>
                 <Avatar className="h-7 w-7">
                   <AvatarImage
-                    src={user?.profile?.avatar_url}
+                    src={userProfile?.user?.profile?.avatar_url}
                     alt={user?.username}
                   />
                   <AvatarFallback className="text-xs bg-white">
@@ -155,7 +166,7 @@ const Header = ({ title, subTitle }: HeaderProps) => {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="gap-2 cursor-pointer"
-                  onClick={() => navigate("/dashboard/profile")}
+                  onClick={handleProfileNavigation}
                 >
                   <User className="h-4 w-4" />
                   Profile
@@ -211,6 +222,8 @@ const Header = ({ title, subTitle }: HeaderProps) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <NotificationsSheet />
     </div>
   );
 };

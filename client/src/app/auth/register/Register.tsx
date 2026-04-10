@@ -46,29 +46,11 @@ const Register = () => {
           email: response.email,
         }),
       );
-      navigate("/dashboard/feed");
+      navigate("/dashboard/feeds");
       toast.success("Welcome to prose! Account created.");
     } catch (error: any) {
-      console.error("Login error:", error);
-      if (error.status === "FETCH_ERROR") {
-        toast.error("Network error. Please check your internet connection.");
-        return;
-      }
-      let errorMessage = "Something went wrong. Please try again.";
-
-      if (error.data) {
-        if (
-          error.data.errors &&
-          Array.isArray(error.data.errors) &&
-          error.data.errors.length > 0
-        ) {
-          errorMessage = error.data.errors.join(", ");
-        } else if (error.data.message && error.data.message !== "Bad Request") {
-          errorMessage = error.data.message;
-        }
-
-        toast.error(errorMessage);
-      }
+      console.error("Register error:", error);
+      toast.message(error.data);
     }
   };
 

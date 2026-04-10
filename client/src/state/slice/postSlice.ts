@@ -5,7 +5,6 @@ type ActiveTab = "text" | "image" | "link";
 
 interface PostsState {
   posts: Post[];
-  currentPost: Post | null;
   metadata: MetaData | null;
   isLoading: boolean;
   error: string | null;
@@ -13,11 +12,15 @@ interface PostsState {
   localVoteCount: number;
   isSheetOpen: boolean;
   activeTab: ActiveTab;
+  preselectedCommunityId: number | null;
+  isEditPostsSheetOpen: boolean;
+  isDeleteModalOpen: boolean;
+  editingPost: Post | null;
+  deletingPost: Post | null;
 }
 
 const initialState: PostsState = {
   posts: [],
-  currentPost: null,
   metadata: null,
   isLoading: false,
   error: null,
@@ -25,6 +28,11 @@ const initialState: PostsState = {
   localVoteCount: 0,
   isSheetOpen: false,
   activeTab: "text",
+  preselectedCommunityId: null,
+  isEditPostsSheetOpen: false,
+  isDeleteModalOpen: false,
+  editingPost: null,
+  deletingPost: null,
 };
 
 export const postsSlice = createSlice({
@@ -33,11 +41,6 @@ export const postsSlice = createSlice({
   reducers: {
     setPosts: (state, action: PayloadAction<Post[]>) => {
       state.posts = action.payload;
-    },
-    setCurrentPost: (state, action: PayloadAction<Post>) => {
-      state.currentPost = action.payload;
-      state.localVoteCount = action.payload.votes_count;
-      state.userVote = null;
     },
     updatePostVote: (
       state,
@@ -48,10 +51,8 @@ export const postsSlice = createSlice({
     ) => {
       state.localVoteCount = action.payload.newCount;
       state.userVote = action.payload.userVote;
-      if (state.currentPost) {
-        state.currentPost.votes_count = action.payload.newCount;
-      }
     },
+
     setMetadata: (state, action: PayloadAction<MetaData>) => {
       state.metadata = action.payload;
     },
@@ -62,28 +63,51 @@ export const postsSlice = createSlice({
       state.error = action.payload;
     },
     clearCurrentPost: (state) => {
-      state.currentPost = null;
       state.userVote = null;
       state.localVoteCount = 0;
     },
     // Sheet actions
-    openSheet: (state, action: PayloadAction<ActiveTab>) => {
+    openSheet: (
+      state,
+      action: PayloadAction<{ tab: ActiveTab; communityId?: number }>,
+    ) => {
       state.isSheetOpen = true;
-      state.activeTab = action.payload;
+      state.activeTab = action.payload.tab;
+      state.preselectedCommunityId = action.payload.communityId ?? null;
     },
     closeSheet: (state) => {
       state.isSheetOpen = false;
       state.activeTab = "text";
+      state.preselectedCommunityId = null;
     },
     setActiveTab: (state, action: PayloadAction<ActiveTab>) => {
       state.activeTab = action.payload;
+    },
+
+    openEditSheet: (state, action: PayloadAction<Post>) => {
+      state.editingPost = action.payload;
+      state.isEditPostsSheetOpen = true;
+    },
+
+    closeEditSheet: (state) => {
+      state.editingPost = null;
+      state.isEditPostsSheetOpen = false;
+    },
+
+    openDeleteModal: (state, action: PayloadAction<Post>) => {
+      state.deletingPost = action.payload;
+      state.isDeleteModalOpen = true;
+    },
+
+    closeDeleteModal: (state) => {
+      state.deletingPost = null;
+      state.isDeleteModalOpen = false;
     },
   },
 });
 
 export const {
   setPosts,
-  setCurrentPost,
   updatePostVote,
   setMetadata,
   setPostsLoading,
@@ -92,6 +116,10 @@ export const {
   openSheet,
   closeSheet,
   setActiveTab,
+  closeDeleteModal,
+  closeEditSheet,
+  openDeleteModal,
+  openEditSheet,
 } = postsSlice.actions;
 
 export default postsSlice.reducer;

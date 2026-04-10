@@ -16,7 +16,7 @@ export const CreatePostCard = () => {
             placeholder="Create Post"
             className="w-full bg-white rounded-full px-4 py-2.5 text-sm border border-orange-300/50 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all cursor-pointer hover:bg-gray-50"
             readOnly
-            onClick={() => dispatch(openSheet("text"))}
+            onClick={() => dispatch(openSheet({ tab: "text" }))}
           />
         </div>
       </div>
@@ -26,7 +26,7 @@ export const CreatePostCard = () => {
           variant="ghost"
           size="sm"
           className="flex-1 gap-2 text-muted-foreground hover:text-foreground hover:bg-orange-300/30"
-          onClick={() => dispatch(openSheet("text"))}
+          onClick={() => dispatch(openSheet({ tab: "text" }))}
         >
           <Plus className="h-4 w-4" />
           Text
@@ -36,7 +36,7 @@ export const CreatePostCard = () => {
           variant="ghost"
           size="sm"
           className="flex-1 gap-2 text-muted-foreground hover:text-foreground hover:bg-orange-300/30"
-          onClick={() => dispatch(openSheet("image"))}
+          onClick={() => dispatch(openSheet({ tab: "image" }))}
         >
           <ImageIcon className="h-4 w-4" />
           Image
@@ -46,7 +46,7 @@ export const CreatePostCard = () => {
           variant="ghost"
           size="sm"
           className="flex-1 gap-2 text-muted-foreground hover:text-foreground hover:bg-orange-300/30"
-          onClick={() => dispatch(openSheet("link"))}
+          onClick={() => dispatch(openSheet({ tab: "link" }))}
         >
           <Link2 className="h-4 w-4" />
           Link

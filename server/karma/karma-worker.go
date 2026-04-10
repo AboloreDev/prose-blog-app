@@ -85,16 +85,14 @@ func (kw *KarmaWorker) Start(){
 		}
 	}()
 }
-func (kw *KarmaWorker) Send(event KarmaEvent){
-	go func() {
-		select {
-		case kw.karmaQueueChan <- event:
-			kw.infoLog.Printf("Sending event to the queue channel %v", event)
 
-		default:
-			
-		}
-	}()
+func (kw *KarmaWorker) Send(event KarmaEvent) {
+    select {
+    case kw.karmaQueueChan <- event:
+        kw.infoLog.Printf("Sending event to the queue channel %v", event)
+    default:
+        kw.errorLog.Printf("karma queue full — skipping event for user %d", event.UserID)
+    }
 }
 
 func (kw *KarmaWorker) Stop(){

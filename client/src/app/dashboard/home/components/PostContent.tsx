@@ -2,7 +2,6 @@
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { Loader2 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,8 +21,9 @@ const PostContent = ({ post }: PostContentProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const [joinCommunity, { isLoading: isJoining }] = useJoinCommunityMutation();
-  const { data: communityDetails, isLoading: isLoadingCommunity } =
-    useGetCommunityByIdQuery(post.community_id);
+  const { data: communityDetails } = useGetCommunityByIdQuery(
+    post.community_id,
+  );
 
   const joinedIds = useAppSelector(
     (state: RootState) => state.auth.joinedCommunityIds,
@@ -51,7 +51,7 @@ const PostContent = ({ post }: PostContentProps) => {
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <img
-              src={communityDetails?.banner_url}
+              src={communityDetails?.banner_url || "/community.png"}
               alt="Community Banner"
               className="h-12 w-12 object-cover rounded-md"
             />

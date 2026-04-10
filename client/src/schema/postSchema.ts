@@ -20,7 +20,7 @@ export const createPostSchema = z
       .positive("Please select a community"),
 
     status: z.enum(["draft", "published", "scheduled"], {
-      required_error: "Please select a post status",
+      error: "Please select a post status",
     }),
 
     publish_at: z.string().optional(),
@@ -47,3 +47,14 @@ export const createPostSchema = z
   });
 
 export type CreatePostFormValues = z.infer<typeof createPostSchema>;
+
+export const updatePostSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(300, "Title must be 300 characters or less"),
+
+  body: z.string().optional(),
+});
+
+export type UpdatePostFormValues = z.infer<typeof updatePostSchema>;
