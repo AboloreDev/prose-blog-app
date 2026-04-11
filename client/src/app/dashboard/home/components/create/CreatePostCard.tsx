@@ -1,4 +1,4 @@
-import { Plus, Image as ImageIcon, Link2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDispatch } from "react-redux";
 import { openSheet } from "@/state/slice/postSlice";
@@ -30,26 +30,6 @@ export const CreatePostCard = () => {
         >
           <Plus className="h-4 w-4" />
           Text
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 gap-2 text-muted-foreground hover:text-foreground hover:bg-orange-300/30"
-          onClick={() => dispatch(openSheet({ tab: "image" }))}
-        >
-          <ImageIcon className="h-4 w-4" />
-          Image
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1 gap-2 text-muted-foreground hover:text-foreground hover:bg-orange-300/30"
-          onClick={() => dispatch(openSheet({ tab: "link" }))}
-        >
-          <Link2 className="h-4 w-4" />
-          Link
         </Button>
       </div>
 

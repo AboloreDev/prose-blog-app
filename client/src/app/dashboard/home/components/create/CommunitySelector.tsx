@@ -31,7 +31,7 @@ export const CommunitySelector = ({
 
   if (readOnly) {
     return (
-      <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2.5 border-none w-fit">
+      <div className="flex items-center gap-2 bg-white rounded-full px-4 py-2.5 border-none">
         <div className="h-5 w-5 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
           <span className="text-[10px] font-bold text-orange-500">
             {readOnlyName?.[0]?.toUpperCase() ?? "C"}
@@ -62,7 +62,7 @@ export const CommunitySelector = ({
             <SelectValue placeholder="Select a community" />
           )}
         </SelectTrigger>
-        <SelectContent className="bg-white rounded-2xl translate-y-8 p-3">
+        <SelectContent className="bg-white w-80 rounded-2xl p-2">
           {safeCommunities.length === 0 ? (
             <div className="px-4 py-6 text-sm text-muted-foreground text-center">
               You don't belong to any community yet
@@ -72,7 +72,7 @@ export const CommunitySelector = ({
               <SelectItem
                 key={community.id}
                 value={String(community.id)}
-                className="rounded-xl px-4 py-3 cursor-pointer"
+                className="rounded-xl  px-4 py-3 cursor-pointer"
               >
                 pr/{community.name}
               </SelectItem>

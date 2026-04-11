@@ -1,13 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  Bell,
-  ChevronDown,
-  Loader2,
-  LogOut,
-  Settings,
-  User,
-} from "lucide-react";
+import { Bell, ChevronDown, Loader2, LogOut, User } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -171,13 +164,6 @@ const Header = ({ title, subTitle }: HeaderProps) => {
                   <User className="h-4 w-4" />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="gap-2 cursor-pointer"
-                  onClick={() => navigate("/dashboard/settings")}
-                >
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="gap-2 text-red-600 cursor-pointer focus:text-red-600"
@@ -194,7 +180,7 @@ const Header = ({ title, subTitle }: HeaderProps) => {
 
       {/* Logout dialog */}
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="md:max-w-2xl! w-full! bg-orange-200 lato-regular !border-0!">
           <AlertDialogHeader>
             <AlertDialogTitle>Log out of Prose?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -202,13 +188,16 @@ const Header = ({ title, subTitle }: HeaderProps) => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoggingOut}>
+            <AlertDialogCancel
+              disabled={isLoggingOut}
+              className="bg-white border-0 rounded-full"
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLogoutConfirm}
               disabled={isLoggingOut}
-              className="bg-red-500 hover:bg-red-600"
+              className="bg-red-500 hover:bg-red-600 text-white rounded-full"
             >
               {isLoggingOut ? (
                 <span className="flex items-center gap-2">

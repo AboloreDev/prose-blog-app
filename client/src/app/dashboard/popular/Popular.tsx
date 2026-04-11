@@ -23,10 +23,13 @@ const Popular = () => {
             </p>
           </div>
         )}
-        {!isLoading &&
-          data?.posts?.map((post: any) => (
-            <PostCard key={post.id} post={post} />
-          ))}
+        {!isLoading && (
+          <div className="flex flex-col space-y-6">
+            {data?.posts?.map((post: any) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import Scheduled from "./app/dashboard/posts/scheduled/Scheduled";
 import Published from "./app/dashboard/posts/published/Published";
 import Profile from "./app/dashboard/profile/Profile";
 import Popular from "./app/dashboard/popular/Popular";
+import FAQ from "./app/dashboard/help/FAQ";
 
 const App = () => {
   const [showSplash, setShowSplash] = useState(() => {
@@ -65,6 +66,7 @@ const App = () => {
 
             <Route path="/dashboard/profile/:id" element={<Profile />} />
             <Route path="/dashboard/profile" element={<Profile />} />
+            <Route path="/dashboard/help" element={<FAQ />} />
           </Route>
         </Route>
 

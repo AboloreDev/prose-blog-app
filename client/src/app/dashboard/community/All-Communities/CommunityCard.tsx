@@ -22,7 +22,9 @@ export const CommunityCard = ({ community }: CommunityCardProps) => {
     { id: user?.id ?? 0 },
     { skip: !user?.id },
   );
-  const isMember = userProfile?.communities.some((c) => c.id === community.id);
+  const communities = userProfile?.communities ?? [];
+
+  const isMember = communities.some((c) => c.id === community.id);
 
   const handleJoin = async (e: React.MouseEvent) => {
     e.stopPropagation();

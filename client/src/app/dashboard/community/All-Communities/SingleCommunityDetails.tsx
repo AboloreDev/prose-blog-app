@@ -62,7 +62,9 @@ const SingleCommunityDetails = () => {
     { skip: !user?.id },
   );
 
-  const isMember = userProfile?.communities.some((c) => c.id === communityId);
+  const communities = userProfile?.communities ?? [];
+
+  const isMember = communities.some((c) => c.id === communityId);
 
   const handleCreatePost = () => {
     if (!isMember) {

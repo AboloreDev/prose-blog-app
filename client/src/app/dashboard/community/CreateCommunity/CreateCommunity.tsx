@@ -19,8 +19,10 @@ import {
 } from "@/schema/communitySchema";
 import { useCreateCommunityMutation } from "@/state/api/communityApi";
 import Header from "@/components/code/Header";
+import { useNavigate } from "react-router-dom";
 
 const CreateCommunity = () => {
+  const navigate = useNavigate();
   const [createCommunity, { isLoading }] = useCreateCommunityMutation();
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -70,9 +72,10 @@ const CreateCommunity = () => {
     try {
       await createCommunity(formData).unwrap();
       toast.success("Community created successfully!");
-      // navigate(`dashboard/communities/${values.slug}`);
-    } catch {
-      toast.error("Failed to create community. Please try again.");
+      navigate(`/dashboard/communities/all`);
+      form.reset();
+    } catch (error: any) {
+      toast.error(error.data);
     }
   };
 

@@ -8,7 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Loader2, Plus, Image as ImageIcon, Link2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 
 import { toast } from "sonner";
 import type { RootState } from "@/state/redux";
@@ -23,7 +23,6 @@ import { CommunitySelector } from "./CommunitySelector";
 import { PostTitleInput } from "./PostTitle";
 import { PostBodyInput } from "./PostBody";
 import { PostImageUpload } from "./PostImageUploader";
-import { PostLinkInput } from "./PostLinkInput";
 import { PostStatusSelector } from "./PostStatus";
 
 export const CreatePostSheet = () => {
@@ -62,7 +61,7 @@ export const CreatePostSheet = () => {
         shouldValidate: true,
       });
     }
-  }, [isSheetOpen, preselectedCommunityId]);
+  }, [isSheetOpen, preselectedCommunityId, form]);
 
   const watchedStatus = form.watch("status");
 
@@ -112,17 +111,13 @@ export const CreatePostSheet = () => {
     }
   };
 
-  const tabs = [
-    { key: "text" as const, label: "Text", icon: Plus },
-    { key: "image" as const, label: "Image & Video", icon: ImageIcon },
-    { key: "link" as const, label: "Link", icon: Link2 },
-  ];
+  const tabs = [{ key: "text" as const, label: "Text", icon: Plus }];
 
   return (
     <Sheet open={isSheetOpen} onOpenChange={handleSheetClose}>
       <SheetContent
         side="right"
-        className="bg-orange-200 w-full! max-w-3xl! overflow-y-auto px-4 lato-regular"
+        className="bg-orange-200 w-full! max-w-3xl! shrink-0 overflow-y-auto px-4 lato-regular"
       >
         <SheetHeader className="mb-4">
           <SheetTitle className="text-2xl font-semibold">
@@ -183,18 +178,8 @@ export const CreatePostSheet = () => {
             />
           )}
 
-          {activeTab === "image" && (
+          {activeTab === "text" && (
             <PostImageUpload onFileSelect={(file) => setImageFile(file)} />
-          )}
-
-          {activeTab === "link" && (
-            <PostLinkInput
-              value={form.watch("link_url") ?? ""}
-              onChange={(val) =>
-                form.setValue("link_url", val, { shouldValidate: true })
-              }
-              error={form.formState.errors.link_url?.message}
-            />
           )}
 
           <PostStatusSelector

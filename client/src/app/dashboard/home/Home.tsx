@@ -8,21 +8,41 @@ import { setMetadata } from "@/state/slice/postSlice";
 import Header from "@/components/code/Header";
 import PostCard from "./components/PostCards";
 import { CreatePostCard } from "./components/create/CreatePostCard";
+import { useGetAllCommunitiesQuery } from "@/state/api/communityApi";
+
+import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const searchQuery = useAppSelector(
     (state: RootState) => state.global.searchQuery,
   );
   const { metadata } = useAppSelector((state: RootState) => state.posts);
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, isFetching } = useGetAllPostsQuery({
+
+  const {
+    data,
+    isLoading: isPostLoading,
+    isError: isPostError,
+    isFetching: isPostfetching,
+  } = useGetAllPostsQuery({
     page,
     page_size: 10,
     query: searchQuery,
     order_by: "",
   });
-
+  const {
+    data: allCommunities,
+    isLoading: isCommunityLoading,
+    isError: isCommunityError,
+    isFetching: isCommunityFetching,
+  } = useGetAllCommunitiesQuery({
+    page,
+    page_size: 5,
+    query: searchQuery,
+    order_by: "DESC",
+  });
   const posts = data?.Posts;
 
   useEffect(() => {
@@ -30,6 +50,10 @@ const Home = () => {
       dispatch(setMetadata(data.MetaData));
     }
   }, [data, dispatch]);
+
+  const isLoading = isPostLoading || isCommunityLoading;
+  const isError = isPostError || isCommunityError;
+  const isFetching = isCommunityFetching || isPostfetching;
 
   return (
     <div className="flex flex-col h-screen">
@@ -131,26 +155,20 @@ const Home = () => {
                     Trending Communities
                   </h3>
                   <div className="space-y-3">
-                    {["technology", "science", "funny"].map((community) => (
+                    {allCommunities?.Communities.map((community) => (
                       <div
-                        key={community}
-                        className="flex items-center justify-between"
+                        onClick={() =>
+                          navigate(`/dashboard/communities/${community.id}`)
+                        }
+                        key={community.id}
+                        className="flex items-center justify-between cursor-pointer"
                       >
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-xs">
-                            {community[0].toUpperCase()}
-                          </div>
-                          <span className="text-sm font-medium">
-                            pr/{community}
+                        <div className="flex items-center gap-2 hover:underline">
+                          <img src={community.banner_url} className="w-8 h-8" />
+                          <span className="text-sm font-semibold">
+                            pr/{community.slug}
                           </span>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs rounded-full"
-                        >
-                          Join
-                        </Button>
                       </div>
                     ))}
                   </div>

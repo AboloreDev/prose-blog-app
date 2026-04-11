@@ -206,6 +206,8 @@ const EditProfileSheet = ({ user }: EditProfileSheetProps) => {
             <Input
               id="email"
               type="email"
+              disabled
+              readOnly
               placeholder="Your email"
               {...register("email")}
               className="bg-white border-orange-100 rounded-xl h-11 focus-visible:ring-orange-300"

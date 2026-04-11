@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Bell, CheckCheck, Loader2 } from "lucide-react";
+import { Bell, CheckCheck, Loader2, X } from "lucide-react";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -50,11 +51,10 @@ const NotificationsSheet = () => {
   return (
     <Sheet
       open={isSheetOpen}
-      onOpenChange={(open) => dispatch(setNotificationsSheetOpen(open))}
+      onOpenChange={(close) => dispatch(setNotificationsSheetOpen(close))}
     >
       <SheetContent className="!w-full md:max-w-2xl! flex flex-col p-0 bg-orange-100">
-        {/* Header */}
-        <SheetHeader className="sticky top-0 z-10 px-5 py-4 border-b flex flex-row items-center justify-between">
+        <SheetHeader className="sticky top-0 z-10 px-5 py-4 flex flex-row items-center justify-between">
           <SheetTitle className="text-lg font-semibold flex items-center gap-2">
             <Bell className="h-5 w-5" />
             Notifications
@@ -64,6 +64,10 @@ const NotificationsSheet = () => {
               </span>
             )}
           </SheetTitle>
+
+          <SheetClose>
+            <X />
+          </SheetClose>
         </SheetHeader>
 
         {/* List */}

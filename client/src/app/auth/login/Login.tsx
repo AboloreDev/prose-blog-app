@@ -45,40 +45,37 @@ const Login = () => {
         }),
       );
       navigate("/dashboard/feeds");
-      toast.success("Logged in successfully!");
+      toast.success("Welcome back to Prose!");
     } catch (error: any) {
       console.error("Login error:", error);
-      toast.message(error.data);
+      toast.error(error.data?.message || "Login failed. Please try again.");
     }
   };
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Sign in to your prose account">
+    <AuthLayout title="Welcome back" subtitle="Sign in to your Prose account">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {/* Email Field */}
         <div className="space-y-2 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-200">
-          <Label
-            htmlFor="email"
-            className="text-neutral-300 text-sm font-medium"
-          >
+          <Label htmlFor="email" className="text-gray-700 text-sm font-medium">
             Email
           </Label>
           <div className="relative group">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 group-focus-within:text-white transition-colors duration-300" />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors duration-300" />
             <Input
               id="email"
               type="email"
               placeholder="name@example.com"
               className={cn(
-                "pl-10 bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-500 focus:border-white focus:ring-1 focus:ring-white/20 transition-all duration-300 h-11",
+                "pl-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all duration-300 h-11 rounded-xl",
                 errors.email &&
-                  "border-red-500 focus:border-red-500 focus:ring-red-500/20",
+                  "border-red-500 focus:border-red-500 focus:ring-red-100",
               )}
               {...register("email")}
             />
           </div>
           {errors.email && (
-            <p className="text-red-400 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
+            <p className="text-red-500 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
               {errors.email.message}
             </p>
           )}
@@ -89,34 +86,34 @@ const Login = () => {
           <div className="flex items-center justify-between">
             <Label
               htmlFor="password"
-              className="text-neutral-300 text-sm font-medium"
+              className="text-gray-700 text-sm font-medium"
             >
               Password
             </Label>
             <a
               href="#"
-              className="text-sm text-neutral-400 hover:text-white transition-colors duration-200"
+              className="text-sm text-orange-600 hover:text-orange-700 transition-colors duration-200 font-medium"
             >
-              Forgot?
+              Forgot password?
             </a>
           </div>
           <div className="relative group">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 group-focus-within:text-white transition-colors duration-300" />
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-orange-500 transition-colors duration-300" />
             <Input
               id="password"
               type={showPassword ? "text" : "password"}
               placeholder="••••••••"
               className={cn(
-                "pl-10 pr-10 bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-500 focus:border-white focus:ring-1 focus:ring-white/20 transition-all duration-300 h-11",
+                "pl-10 pr-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all duration-300 h-11 rounded-xl",
                 errors.password &&
-                  "border-red-500 focus:border-red-500 focus:ring-red-500/20",
+                  "border-red-500 focus:border-red-500 focus:ring-red-100",
               )}
               {...register("password")}
             />
             <button
               type="button"
               onClick={() => dispatch(toggleShowPassword())}
-              className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors duration-200"
+              className="absolute cursor-pointer right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-500 transition-colors duration-200"
             >
               {showPassword ? (
                 <EyeOff className="w-4 h-4" />
@@ -126,7 +123,7 @@ const Login = () => {
             </button>
           </div>
           {errors.password && (
-            <p className="text-red-400 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
+            <p className="text-red-500 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
               {errors.password.message}
             </p>
           )}
@@ -137,11 +134,11 @@ const Login = () => {
           <input
             type="checkbox"
             id="remember"
-            className="w-4 h-4 rounded border-neutral-700 bg-neutral-800 text-white focus:ring-white/20 cursor-pointer"
+            className="w-4 h-4 rounded border-gray-300 bg-white text-orange-500 focus:ring-orange-500/20 cursor-pointer accent-orange-500"
           />
           <label
             htmlFor="remember"
-            className="text-sm text-neutral-400 cursor-pointer hover:text-neutral-300 transition-colors"
+            className="text-sm text-gray-600 cursor-pointer hover:text-gray-800 transition-colors"
           >
             Remember me for 30 days
           </label>
@@ -151,11 +148,11 @@ const Login = () => {
         <Button
           type="submit"
           disabled={isLoading || !isValid}
-          className="w-full bg-white text-neutral-950 hover:bg-neutral-200 font-medium h-11 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-orange-500 text-white hover:bg-orange-600 font-medium h-11 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-lg shadow-orange-200"
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-neutral-950/30 border-t-neutral-950 rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               <span>Signing in...</span>
             </div>
           ) : (
@@ -169,21 +166,21 @@ const Login = () => {
         {/* Divider */}
         <div className="relative animate-in fade-in duration-500 delay-500">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-neutral-800" />
+            <div className="w-full border-t border-orange-200" />
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="bg-neutral-900 px-2 text-neutral-500">
+            <span className="bg-orange-50 px-2 text-gray-500">
               Or continue with
             </span>
           </div>
         </div>
 
         {/* Register link */}
-        <p className="text-center text-sm text-neutral-400 animate-in fade-in duration-500 delay-500">
+        <p className="text-center text-sm text-gray-600 animate-in fade-in duration-500 delay-500">
           Don't have an account?{" "}
           <button
             type="button"
-            className="text-white hover:underline font-medium transition-all duration-200"
+            className="text-orange-600 hover:text-orange-700 font-semibold transition-all duration-200 hover:underline"
             onClick={() => navigate("/auth/register")}
           >
             Create one

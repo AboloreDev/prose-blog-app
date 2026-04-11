@@ -115,7 +115,7 @@ const PostCard = ({ post }: PostCardProps) => {
           <span className="text-xs text-muted-foreground">•</span>
           <span className="text-xs text-muted-foreground">{timeAgo}</span>
           <span
-            className="text-xs text-muted-foreground"
+            className="text-xs text-muted-foreground cursor-pointer hover:underline"
             onClick={(e) => {
               e.stopPropagation();
               navigate(`/dashboard/profile/${post.user_id}`);
