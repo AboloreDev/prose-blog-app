@@ -40,6 +40,8 @@ func (app *Application) Routes() http.Handler {
 
     // Posts
     mux.HandleFunc("GET /api/v1/posts", app.Homepage)
+    mux.HandleFunc("GET /api/v1/posts/trending", app.GetTrendingPosts)
+    
     mux.HandleFunc("GET /api/v1/posts/{id}", app.GetSinglePost)
     mux.Handle("POST /api/v1/posts",
         middleware.RequireAuth(http.HandlerFunc(app.CreatePost)),
@@ -58,6 +60,9 @@ func (app *Application) Routes() http.Handler {
     )
     mux.Handle("GET /api/v1/posts/scheduled",
         middleware.RequireAuth(http.HandlerFunc(app.GetUserScheduledPosts)),
+    )
+    mux.Handle("PATCH /api/v1/posts/{id}/publish-drafts",
+        middleware.RequireAuth(http.HandlerFunc(app.PublishDraftPost)),
     )
     mux.HandleFunc("GET /api/v1/posts/scheduled/all", app.GetAllScheduledPosts)
 
@@ -107,9 +112,23 @@ func (app *Application) Routes() http.Handler {
     mux.Handle("DELETE /api/v1/communities/{id}/join",
         middleware.RequireAuth(http.HandlerFunc(app.LeaveCommunity)),
     )
+    mux.Handle("GET /api/v1/communities/{id}/user",
+        middleware.RequireAuth(http.HandlerFunc(app.GetUserCommunities)),
+    )
 
     // Preset Avatars
     mux.HandleFunc("GET /api/v1/avatars", app.GetPresetAvatars)
+
+    // Notifications
+     mux.Handle("GET /api/v1/notifications/all",
+        middleware.RequireAuth(http.HandlerFunc(app.GetUserNotifications)),
+    )
+     mux.Handle("GET /api/v1/notifications/{id}",
+        middleware.RequireAuth(http.HandlerFunc(app.GetNotificationById)),
+    )
+     mux.Handle("PATCH /api/v1/notifications/all",
+        middleware.RequireAuth(http.HandlerFunc(app.MarkAllAsRead)),
+    )
 
     // Middleware chain
     var handler http.Handler = mux

@@ -20,39 +20,53 @@ type NotificationWorker struct {
 	queueChan chan NotificationJob
 	repo NotificationRepository
 	stopChan chan struct{}
+	
 }
 
 func NewNotificationWorker(repo NotificationRepository) *NotificationWorker {
 	return &NotificationWorker{
-		queueChan: make(chan NotificationJob, 100),
+		queueChan: make(chan NotificationJob, 10),
 		repo: repo,
 		stopChan: make(chan struct{}),
 	}
 }
 
 func (nw *NotificationWorker) Start() {
-	go func() {
+    for len(nw.queueChan) > 0 {
+        <- nw.queueChan
+    }
+
+    go func() {
 		for {
-			select{
-			case job := <- nw.queueChan:
-				_, err := nw.repo.CreateNotification(
-					job.ReceiverID,
-					job.SenderID,
-					job.Message,
-					job.NotificationType,
-					job.PostID,
-					job.CommentID,
-				)
-				if err != nil {
-					fmt.Println("Notification creation failed")
-					return
-				}
-				fmt.Println("Notification Created")
-			case <- nw.stopChan:
-				return
-			}
-		}
-	}()
+            select {
+            case <-nw.queueChan:
+            default:
+                goto done 
+            }
+        }
+        done:
+
+        for {
+            select {
+            case job := <- nw.queueChan:
+                _, err := nw.repo.CreateNotification(
+                    job.ReceiverID,
+                    job.SenderID,
+                    job.Message,
+                    job.NotificationType,
+                    job.PostID,
+                    job.CommentID,
+                )
+                if err != nil {
+                    fmt.Printf("notification creation failed: %v", err)
+                    continue
+                }
+                fmt.Println("notification created")
+            case <- nw.stopChan:
+                return
+            }
+        }
+    }()
 }
 
 func (nw *NotificationWorker) Stop() {
@@ -60,17 +74,10 @@ func (nw *NotificationWorker) Stop() {
 }
 
 func (nw *NotificationWorker) Send(job NotificationJob) {
-	go func() {
-		for {
-			select {
-			case nw.queueChan <- job:
-	
-			default: {
-				fmt.Println("Queue has been filled, still sending!")
-			}
-			}
-		}
-	}()
+    select {
+    case nw.queueChan <- job:
+    default:
+    }
 }
 func (nw *NotificationWorker) DeleteNotificationAtInterval() {
 	ticker := time.NewTicker(4 * 24 * time.Hour)

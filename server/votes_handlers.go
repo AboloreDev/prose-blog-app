@@ -29,6 +29,7 @@ type FetchedVotesData struct {
 
 func (app *Application) VotePost(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
+	 app.infoLog.Printf("VotePost called — userID: %d", userId) 
 
 	postId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -128,6 +129,7 @@ func (app *Application) GetAllPostVote(w http.ResponseWriter, r *http.Request) {
 
 func (app *Application) VoteComment(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
+	 app.infoLog.Printf("VotePost called — userID: %d", userId) 
 
 	commentId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {

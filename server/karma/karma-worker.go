@@ -1,7 +1,6 @@
 package karma
 
 import (
-	"fmt"
 	"log"
 	"prose-blog/users"
 	"time"
@@ -86,16 +85,14 @@ func (kw *KarmaWorker) Start(){
 		}
 	}()
 }
-func (kw *KarmaWorker) Send(event KarmaEvent){
-	go func() {
-		select {
-		case kw.karmaQueueChan <- event:
-			kw.infoLog.Printf("Sending event to the queue channel %v", event)
 
-		default:
-			fmt.Println("Karam queue full but still sending")
-		}
-	}()
+func (kw *KarmaWorker) Send(event KarmaEvent) {
+    select {
+    case kw.karmaQueueChan <- event:
+        kw.infoLog.Printf("Sending event to the queue channel %v", event)
+    default:
+        kw.errorLog.Printf("karma queue full — skipping event for user %d", event.UserID)
+    }
 }
 
 func (kw *KarmaWorker) Stop(){
