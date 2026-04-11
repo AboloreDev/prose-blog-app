@@ -1,8 +1,10 @@
 package notifications
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"time"
 )
 
 
@@ -41,8 +43,11 @@ func (r *SQLNotificationRepository) CreateNotification(receiverID int, senderID 
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
 	`
 	var notificationId int
-	row := r.db.QueryRow(
-		statement, receiverID, senderID, postID, commentID, notificationType, message)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	
+	row := r.db.QueryRowContext(
+		ctx, statement, receiverID, senderID, postID, commentID, notificationType, message)
 
 	err := row.Scan(&notificationId)
 	if err != nil {
@@ -68,7 +73,10 @@ func (r *SQLNotificationRepository) GetUserNotifications(userID int) ([]Notifica
 		 ORDER BY n.created_at DESC
 	`
 
-	rows, err := r.db.Query(queryStatement, userID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +121,10 @@ func (r *SQLNotificationRepository) GetNotificationById(notificationID, userID i
 		 ORDER BY n.created_at DESC
 	`
 
-	rows := r.db.QueryRow(queryStatement, notificationID, userID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows := r.db.QueryRowContext(ctx, queryStatement, notificationID, userID)
 	
 	var notification Notifications
 	err := rows.Scan(
@@ -143,7 +154,10 @@ func (r *SQLNotificationRepository) GetNotificationById(notificationID, userID i
 func (r *SQLNotificationRepository) MarkAllAsRead(userID int) error {
 	statement := `UPDATE notifications SET is_read = true WHERE user_id = $1`
 
-	_, err := r.db.Exec(statement, userID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err := r.db.ExecContext(ctx, statement, userID)
 	if err != nil {
 		return nil
 	}
@@ -152,9 +166,12 @@ func (r *SQLNotificationRepository) MarkAllAsRead(userID int) error {
 }
 
 func (r *SQLNotificationRepository) DeleteOldNotifications() error {
-    _, err := r.db.Exec(`
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+    _, err := r.db.ExecContext(ctx, `
         DELETE FROM notifications 
-        WHERE created_at < NOW() - INTERVAL '2 days'
+        WHERE created_at < NOW() - INTERVAL '4 days'
     `)
     return err
 }

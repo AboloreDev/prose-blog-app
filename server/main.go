@@ -12,7 +12,9 @@ import (
 	"prose-blog/comments"
 	"prose-blog/community"
 	"prose-blog/followers"
+	"prose-blog/karma"
 	"prose-blog/migration"
+	"prose-blog/notifications"
 	"prose-blog/posts"
 	ratelimit "prose-blog/rate-limit"
 	"prose-blog/users"
@@ -40,55 +42,81 @@ type Application struct {
 	server 	 *http.Server
 	scheduleList map[int]chan struct{}
 	schedulerMutex sync.Mutex
+	notificationWorker *notifications.NotificationWorker
+    notificationsRepo notifications.NotificationRepository
+	karmaWorker *karma.KarmaWorker
 }
 
 func main() {
-	godotenv.Load()
-	db, err := connectDb()
-	if err != nil {
-		log.Fatal("Failed to connect to db", err)
-	}
-	defer db.Close()
-	fmt.Println("Database connection successful")
-	
+    godotenv.Load()
+    
+    db, err := connectDb()
+    if err != nil {
+        log.Fatal("Failed to connect to db:", err)
+    }
+    defer db.Close()
 
-	app := &Application{
-		errorLog: log.New(os.Stderr, "ERROR\t", log.Ltime|log.LstdFlags|log.Lmicroseconds|log.Lshortfile),
-		infoLog:  log.New(os.Stdout, "INFO\t", log.Ltime|log.LstdFlags),
-		limiter:  ratelimit.NewIPLimiter(10, 20),
-		userRepo: users.NewSQLUserRepository(db),
-		authRepo: auth.NewSQLAuthRepository(db),
-		commentRepo: comments.NewSQLCommentsRepository(db),
-		commRepo: community.NewSQLCommunityRepository(db),
-		votesRepo: votes.NewSQLVoteRepository(db),
-		followersRepo: followers.NewSQLFollowersRepository(db),
-		stopChan: make(chan struct{}),
-		postRepo: posts.NewSQLPostRepository(db),
-		scheduleList: make(map[int]chan struct{}),
-	}
-	
-	err = app.RestoreScheduledPosts()
-	if err != nil {
-		app.errorLog.Printf("failed to restore scheduled posts: %v", err)
-	}
+    errorLog := log.New(os.Stderr, "ERROR\t", log.Ltime|log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
+    infoLog  := log.New(os.Stdout, "INFO\t", log.Ltime|log.LstdFlags)
 
-	app.StartTokenCleanUp()
-	
-	errCh := make(chan error, 1)
-	go func (){
-		app.infoLog.Println("Server started on PORT 9000")
-		errCh <-app.Serve()
-	}()
+    userRepo     := users.NewSQLUserRepository(db)
+    authRepo     := auth.NewSQLAuthRepository(db)
+    postRepo     := posts.NewSQLPostRepository(db)
+    commentRepo  := comments.NewSQLCommentsRepository(db)
+    commRepo     := community.NewSQLCommunityRepository(db)
+    votesRepo    := votes.NewSQLVoteRepository(db)
+    followersRepo := followers.NewSQLFollowersRepository(db)
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+    notificationsRepo  := notifications.NewNotificationRepository(db)
+    notificationWorker := notifications.NewNotificationWorker(notificationsRepo)
+    karmaWorker        := karma.NewKarmaWorker(userRepo, errorLog, infoLog)
 
-	select{
-	case err := <-errCh:
-		app.errorLog.Fatal("server error:", err)
-	case <-quit:
-		app.infoLog.Println("Shutting down server...")
-	}
+    app := &Application{
+        errorLog:           errorLog,
+        infoLog:            infoLog,
+        limiter:            ratelimit.NewIPLimiter(10, 20),
+        userRepo:           userRepo,
+        authRepo:           authRepo,
+        postRepo:           postRepo,
+        commentRepo:        commentRepo,
+        commRepo:           commRepo,
+        votesRepo:          votesRepo,
+        followersRepo:      followersRepo,
+        stopChan:           make(chan struct{}),
+        scheduleList:       make(map[int]chan struct{}),
+        notificationWorker: notificationWorker,
+        karmaWorker:        karmaWorker,
+        notificationsRepo: notificationsRepo,
+    }
+
+    err = app.RestoreScheduledPosts()
+    if err != nil {
+        app.errorLog.Printf("failed to restore scheduled posts: %v", err)
+    }
+
+    app.StartTokenCleanUp()
+    notificationWorker.Start()
+    notificationWorker.DeleteNotificationAtInterval()
+    karmaWorker.Start()
+
+    errCh := make(chan error, 1)
+    go func() {
+        app.infoLog.Println("Server started on PORT 9000")
+        err := app.Serve()
+        if err != nil && err != http.ErrServerClosed {
+            errCh <- err
+        }
+    }()
+
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+    select {
+    case err := <-errCh:
+        app.errorLog.Fatal("server error:", err)
+    case <-quit:
+        app.infoLog.Println("Shutting down server...")
+    }
 
     ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
     defer cancel()
@@ -98,6 +126,8 @@ func main() {
     }
 
     close(app.stopChan)
+    notificationWorker.Stop()
+    karmaWorker.Stop()
 
     app.infoLog.Println("server stopped cleanly")
 }
@@ -118,9 +148,6 @@ func connectDb() (*sql.DB, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-  
-	_, err = db.Exec("PRAGMA journal_mode=WAL")
-	_, err = db.Exec("PRAGMA foreign_keys=ON")
 
 	migrator := migration.NewMigrator(db)
     err = migrator.RunMigrations()

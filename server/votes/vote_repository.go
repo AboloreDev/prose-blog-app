@@ -1,8 +1,10 @@
 package votes
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"time"
 )
 
 var ErrDuplicateVotes = errors.New("Duplicate votes")
@@ -59,9 +61,9 @@ func (r *SQLVoteRepository) VoteAPost(userID, postID int, voteType string) error
 		UPDATE votes SET vote_type = $1 
 		WHERE user_id = $2 AND post_id = $3
 	`, voteType, userID, postID)
+
 	return err
 }
-
 
 func (r *SQLVoteRepository) GetPostVotes(postId int) ([]PostVotes, error) {
 	queryStatement := `
@@ -75,7 +77,10 @@ func (r *SQLVoteRepository) GetPostVotes(postId int) ([]PostVotes, error) {
 		ORDER BY v.created_at DESC
 	`
 
-	rows, err  := r.db.Query(queryStatement, postId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err  := r.db.QueryContext(ctx, queryStatement, postId)
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +103,6 @@ func (r *SQLVoteRepository) GetPostVotes(postId int) ([]PostVotes, error) {
 
 	return votes, nil
 }
-
-
 
 func (r *SQLVoteRepository) VoteAComment(userID, commentID int, voteType string) error {
 	if voteType != "up" && voteType != "down" {
@@ -151,7 +154,10 @@ func (r *SQLVoteRepository) GetPostComments(commentId int) ([]CommentVotes, erro
 		ORDER BY v.created_at DESC
 	`
 
-	rows, err := r.db.Query(queryStatement, commentId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, commentId)
 	if err != nil {
 		return nil, err
 	}

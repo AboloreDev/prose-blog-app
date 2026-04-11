@@ -1,29 +1,33 @@
 package community
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
+	"prose-blog/helpers"
 	"strings"
+	"time"
 )
 
 var ErrDuplicateName = errors.New("Duplicate Community Name") 
 var ErrDuplicateSlug = errors.New("Duplicate Community Slug") 
 var ErrNoRowsAvailable = errors.New("No Rows Available")
 var ErrInvalidPageRange = errors.New("invalid page range: 1 to 100 max")
+var ErrInvalidVisibilityType = errors.New("Invalid Visibility type")
 
 type CommunityRepository interface {
-	CreateCommunity(name, slug, description, banner string, createdBy int) (int, error)
+	CreateCommunity(name, slug, description, banner, visibility string, createdBy int) (int, error)
 	GetCommunityBySlug(communitySlug string) (*Community, error)
 	GetCommunityById(communityId int) (*Community, error)
-	GetAllCommunities(filter Filter) ([]Community, MetaData, error)
+	GetAllCommunities(filter helpers.Filter) ([]Community, helpers.MetaData, error)
 	JoinACommunity(userId int, communityId int, role string) error
 	LeaveACommunity(userId, communityId int) error
 	GetAllCommunityMembers(communityId int) ([]CommunityMember, error) 
 	DeleteACommunity(communityId int) error 
 	UpdateACommunity(cm *Community) error 
 	IsMember(userId, communityId int) (bool, error)
+	GetUserCommunities(userId int) ([]Community, error) 
 }
 
 type SQLCommunityRepository struct {
@@ -34,41 +38,18 @@ func NewSQLCommunityRepository(db *sql.DB) CommunityRepository {
 	return &SQLCommunityRepository{ db: db}
 }
 
-func (f *Filter) Validate() error {
-	if f.PageSize <= 0 || f.PageSize >= 100 {
-		return ErrInvalidPageRange
-	}
-	return nil
-}
 
-func calculateMetaData(totalRecords, page, pageSize int) MetaData {
-	meta := MetaData{
-		CurrentPage:  page,
-		PageSize:     pageSize,
-		FirstPage:    1,
-		LastPage:     int(math.Ceil(float64(totalRecords) / float64(pageSize))),
-		TotalRecords: totalRecords,
-	}
-	meta.NextPage = meta.CurrentPage + 1
-	meta.PreviousPage = meta.CurrentPage - 1
-	if meta.CurrentPage <= meta.FirstPage {
-		meta.PreviousPage = 0
-	}
-	if meta.CurrentPage >= meta.LastPage {
-    meta.NextPage = 0
-	}
-
-	return meta
-}
-
-func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner string, createdBy int) (int, error) {
+func (r *SQLCommunityRepository) CreateCommunity(name, slug, description, banner, visibility string, createdBy int) (int, error) {
 	queryStatement := `
-		INSERT INTO communities (name, slug, description, banner_url, created_by) 
-		VALUES ($1, $2, $3, $4, $5) RETURNING id
+		INSERT INTO communities (name, slug, description, banner_url, visibility, created_by) 
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
 	`
 
 	var communityId int
-	row := r.db.QueryRow(queryStatement, name, slug, description, banner, createdBy)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	row := r.db.QueryRowContext(ctx, queryStatement, name, slug, description, banner, visibility, createdBy)
 
 	err := row.Scan(&communityId)
 	if err != nil {
@@ -93,7 +74,10 @@ func (r *SQLCommunityRepository) GetCommunityBySlug(communitySlug string) (*Comm
 		WHERE cm.slug = $1
 	`
 
-	rows := r.db.QueryRow(queryStatement, communitySlug)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows := r.db.QueryRowContext(ctx, queryStatement, communitySlug)
 
 	var community Community
 	err := rows.Scan(
@@ -121,7 +105,10 @@ func (r *SQLCommunityRepository) GetCommunityById(communityId int) (*Community, 
 		ORDER BY cm.created_at DESC
 	`
 
-	rows := r.db.QueryRow(queryStatement, communityId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows := r.db.QueryRowContext(ctx, queryStatement, communityId)
 
 	var community Community
 	err := rows.Scan(
@@ -135,10 +122,10 @@ func (r *SQLCommunityRepository) GetCommunityById(communityId int) (*Community, 
 	return &community, nil
 }
 
-func (r *SQLCommunityRepository) GetAllCommunities(filter Filter) ([]Community, MetaData, error) {
+func (r *SQLCommunityRepository) GetAllCommunities(filter helpers.Filter) ([]Community, helpers.MetaData, error) {
 	err := filter.Validate()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -169,9 +156,12 @@ func (r *SQLCommunityRepository) GetAllCommunities(filter Filter) ([]Community, 
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -185,21 +175,21 @@ func (r *SQLCommunityRepository) GetAllCommunities(filter Filter) ([]Community, 
 			&community.CreatedBy, &community.CreatedAt, &community.CommunityCreator,
 		)
 		if err != nil {
-			return nil, MetaData{}, err
+			return nil, helpers.MetaData{}, err
 		}
 		community.TotalRecords = totalRecords
 		communities = append(communities, community)
 	}
 	err = rows.Err()
 	if err != nil {
-    return nil, MetaData{}, err
+    return nil, helpers.MetaData{}, err
 	}
 
 	if len(communities) == 0 {
-		return []Community{}, MetaData{}, nil
+		return []Community{}, helpers.MetaData{}, nil
 	}
 
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return communities, meta, nil
 }
@@ -215,7 +205,10 @@ func (r *SQLCommunityRepository) JoinACommunity(userId int, communityId int, rol
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(queryStatement, userId, communityId, role)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err = tx.ExecContext(ctx, queryStatement, userId, communityId, role)
 	if err != nil {
 		return err
 	}
@@ -225,7 +218,10 @@ func (r *SQLCommunityRepository) JoinACommunity(userId int, communityId int, rol
 		WHERE id = $1
 	`
 
-	_, err = tx.Exec(updateStatement, communityId)
+	ctx, cancel = context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	
+	_, err = tx.ExecContext(ctx, updateStatement, communityId)
 	if err != nil {
 		return err
 	}
@@ -245,7 +241,10 @@ func (r *SQLCommunityRepository) LeaveACommunity(userId, communityId int) error 
 		WHERE user_id = $1 AND community_id = $2
 	`
 
-	rows, err := r.db.Exec(queryStatement, userId, communityId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.ExecContext(ctx, queryStatement, userId, communityId)
 	if err != nil {
 		return  err
 	}
@@ -264,7 +263,10 @@ func (r *SQLCommunityRepository) LeaveACommunity(userId, communityId int) error 
 		WHERE id = $1
 	`
 
-	_, err = r.db.Exec(updateStatement, communityId)
+	ctx, cancel = context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err = r.db.ExecContext(ctx, updateStatement, communityId)
 	if err != nil {
 		return  err
 	}
@@ -284,7 +286,10 @@ func (r *SQLCommunityRepository) GetAllCommunityMembers(communityId int) ([]Comm
 		ORDER BY cm.joined_at
 	`
 
-	rows, err  := r.db.Query(queryStatement, communityId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err  := r.db.QueryContext(ctx, queryStatement, communityId)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +318,10 @@ func (r *SQLCommunityRepository) DeleteACommunity(communityId int) error {
 		DELETE FROM communities WHERE id = $1
 	`
 
-	rows, err := r.db.Exec(queryStatement, communityId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.ExecContext(ctx, queryStatement, communityId)
 	if err != nil {
 		return  err
 	}
@@ -332,11 +340,14 @@ func (r *SQLCommunityRepository) DeleteACommunity(communityId int) error {
 
 func (r *SQLCommunityRepository) UpdateACommunity(cm *Community) error {
 	queryStatement := `
-		UPDATE communities SET name = $1, slug = $2, description = $3, banner_url = $4
-		WHERE id = $5
+		UPDATE communities SET name = $1, slug = $2, description = $3, banner_url = $4, visibility = $5
+		WHERE id = $6
 	`
 
-	_, err := r.db.Exec(queryStatement, cm.Name, cm.Slug, cm.Description, cm.Banner, cm.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err := r.db.ExecContext(ctx, queryStatement, cm.Name, cm.Slug, cm.Description, cm.Banner, cm.Visibility, cm.ID)
 	if err != nil {
 		return err
 	}
@@ -350,10 +361,52 @@ func (r *SQLCommunityRepository) IsMember(userId, communityId int) (bool, error)
         WHERE user_id = $1 AND community_id = $2
     `
     var count int
-    err := r.db.QueryRow(statement, userId, communityId).Scan(&count)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+    err := r.db.QueryRowContext(ctx, statement, userId, communityId).Scan(&count)
     if err != nil {
         return false, err
     }
     return count > 0, nil
 }
 
+func (r *SQLCommunityRepository) GetUserCommunities(userId int) ([]Community, error) {
+	queryStatement := `
+	SELECT c.id, c.name, c.slug, c.created_at, cm.role, cm.joined_at
+		FROM communities AS c
+		INNER JOIN community_members AS cm ON c.id = cm.community_id
+		WHERE cm.user_id = $1
+	`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	var communities []Community
+	for rows.Next() {
+		var community Community
+		err := rows.Scan(
+			&community.ID, &community.Name, &community.Slug, &community.CreatedAt, 
+			&community.Role, &community.JoinedAt,
+		)
+		if err != nil {
+		return nil, err
+		}
+
+		communities = append(communities, community)
+	}
+	
+	err = rows.Err()
+	if err == sql.ErrNoRows{
+		return nil, ErrNoRowsAvailable
+	}
+
+	return communities, nil
+
+}

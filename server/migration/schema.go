@@ -24,6 +24,7 @@ var communitiesTableSchema = `CREATE TABLE IF NOT EXISTS communities (
     slug         TEXT NOT NULL UNIQUE,
     description  TEXT,
     banner_url   TEXT,
+     visibility  TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
     created_by   INTEGER NOT NULL REFERENCES users(id),
     member_count INTEGER NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()

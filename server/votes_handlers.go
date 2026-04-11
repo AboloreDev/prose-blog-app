@@ -3,7 +3,9 @@ package main
 import (
 	"net/http"
 	"prose-blog/helpers"
+	"prose-blog/karma"
 	"prose-blog/middleware"
+	"prose-blog/notifications"
 	"prose-blog/votes"
 	"strconv"
 )
@@ -27,6 +29,7 @@ type FetchedVotesData struct {
 
 func (app *Application) VotePost(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
+	 app.infoLog.Printf("VotePost called — userID: %d", userId) 
 
 	postId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -53,6 +56,43 @@ func (app *Application) VotePost(w http.ResponseWriter, r *http.Request) {
 		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
+	}
+
+	if post.UserID != userId {
+		user, err := app.userRepo.GetUserById(userId)
+		if err != nil {
+				app.errorLog.Println(err)
+			http.Error(w, "You cant send notifcation to yourself", http.StatusBadRequest)
+			return
+		} else {
+			typeOfNotification := "post_upvote"
+				if cv.Vote_Type == "down" {
+					typeOfNotification = "post_downvote"
+				}
+				message := helpers.BuildNotificationMessage(user.Username, typeOfNotification)
+				app.notificationWorker.Send(notifications.NotificationJob{
+					SenderID: userId,
+					ReceiverID: post.UserID,
+					Message: message,
+					NotificationType: typeOfNotification,
+					SenderName: user.Username,
+					ReceiverName: post.Author,
+					PostID: &postId,
+					CommentID: nil,
+				})
+				app.infoLog.Printf("Notification sent to user %v, %s", post.UserID, post.Author)
+		}
+	}
+
+	if post.UserID != userId {
+		delta := 1
+		if cv.Vote_Type == "down" {
+			delta = -1
+		}
+		app.karmaWorker.Send(karma.KarmaEvent{
+			UserID: post.UserID,
+			Delta:  delta,
+		})
 	}
 
 	helpers.WriteJSON(w, http.StatusCreated, CreateVoteResponse{
@@ -89,6 +129,7 @@ func (app *Application) GetAllPostVote(w http.ResponseWriter, r *http.Request) {
 
 func (app *Application) VoteComment(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
+	 app.infoLog.Printf("VotePost called — userID: %d", userId) 
 
 	commentId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -115,6 +156,42 @@ func (app *Application) VoteComment(w http.ResponseWriter, r *http.Request) {
 		app.errorLog.Println(err)
 		http.Error(w, "Server Error", http.StatusInternalServerError)
 		return
+	}
+
+	if comment.UserId != userId {
+		user, err := app.userRepo.GetUserById(userId)
+		if err != nil {
+			app.errorLog.Println(err)
+			http.Error(w, "You cant send notifcation to yourself", http.StatusBadRequest)
+			return
+		} else {
+			notificationType := "comment_upvote"
+			if cv.Vote_Type == "down" {
+				notificationType = "comment_downvote"
+			}
+			message := helpers.BuildNotificationMessage(user.Username, notificationType)
+			app.notificationWorker.Send(notifications.NotificationJob{
+				Message: message,
+				SenderID: userId,
+				ReceiverID: comment.UserId,
+				SenderName: user.Username,
+				ReceiverName: comment.Author,
+				PostID: nil,
+				CommentID: &comment.ID,
+			})
+			app.infoLog.Printf("Notification sent to user %v, %s", comment.UserId, comment.Author)
+		}
+	}
+
+	if comment.UserId != userId {
+		delta := 1
+		if cv.Vote_Type == "down" {
+			delta = -1
+		}
+		app.karmaWorker.Send(karma.KarmaEvent{
+			UserID: comment.UserId,
+			Delta:  delta,
+		})
 	}
 
 	helpers.WriteJSON(w, http.StatusCreated, CreateVoteResponse{
