@@ -1,20 +1,22 @@
 package comments
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
+	"prose-blog/helpers"
 	"strings"
+	"time"
 )
 
 type CommentsRepository interface{
 	CreateComment(postId, userId int, body string, parent_id *int) (int, error)
-	GetCommentsByPost(postId int, filter Filter) ([]Comments, MetaData, error)
+	GetCommentsByPost(postId int, filter helpers.Filter) ([]Comments, helpers.MetaData, error)
 	GetCommentById(commentId int) (*Comments, error)
 	UpdateComment(comment *Comments) error
 	DeleteComment(commentId int) error
-	GetNestedComments(commentId int, filter Filter) ([]Comments, MetaData, error)
+	GetNestedComments(commentId int, filter helpers.Filter) ([]Comments, helpers.MetaData, error)
 }
 
 type SQLCommentsRepository struct {
@@ -29,32 +31,8 @@ var ErrNoRowsAvailable = errors.New("No rows available")
 var ErrDuplicatePostTitle = errors.New("Duplicate Post Title")
 var ErrInvalidPageRange = errors.New("invalid page range: 1 to 100 max")
 
-func (f *Filter) Validate() error {
-	if f.PageSize <= 0 || f.PageSize >= 100 {
-		return ErrInvalidPageRange
-	}
-	return nil
-}
 
-func calculateMetaData(totalRecords, page, pageSize int) MetaData {
-	meta := MetaData{
-		CurrentPage:  page,
-		PageSize:     pageSize,
-		FirstPage:    1,
-		LastPage:     int(math.Ceil(float64(totalRecords) / float64(pageSize))),
-		TotalRecords: totalRecords,
-	}
-	meta.NextPage = meta.CurrentPage + 1
-	meta.PreviousPage = meta.CurrentPage - 1
-	if meta.CurrentPage <= meta.FirstPage {
-		meta.PreviousPage = 0
-	}
-	if meta.CurrentPage >= meta.LastPage {
-    meta.NextPage = 0
-	}
 
-	return meta
-}
 
 func (r *SQLCommentsRepository) CreateComment(postId, userId int, body string, parent_id *int) (int, error) {
 	queryStatement := `
@@ -63,7 +41,10 @@ func (r *SQLCommentsRepository) CreateComment(postId, userId int, body string, p
 		`
 
 	var commentId int
-	row := r.db.QueryRow(queryStatement, postId, userId, parent_id, body)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	row := r.db.QueryRowContext(ctx, queryStatement, postId, userId, parent_id, body)
 
 	err := row.Scan(&commentId)
 	if err != nil {
@@ -73,10 +54,10 @@ func (r *SQLCommentsRepository) CreateComment(postId, userId int, body string, p
 	return commentId, nil
 }
 
-func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]Comments, MetaData, error) {
+func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter helpers.Filter) ([]Comments, helpers.MetaData, error) {
 	err := filter.Validate()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -115,9 +96,12 @@ func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -131,7 +115,7 @@ func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]
 			&comment.CommentVoteCount,
 		)
 		if err != nil {
-			return nil, MetaData{}, err
+			return nil, helpers.MetaData{}, err
 		}
 		comment.TotalRecords = totalRecords
 		comments = append(comments, comment)
@@ -139,14 +123,14 @@ func (r *SQLCommentsRepository) GetCommentsByPost(postId int, filter Filter) ([]
 
 	err = rows.Err()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	if len(comments) == 0 {
-		return []Comments{}, MetaData{}, nil
+		return []Comments{}, helpers.MetaData{}, nil
 	}
 
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return comments, meta, nil
 }
@@ -166,7 +150,10 @@ func (r *SQLCommentsRepository) GetCommentById(commentId int) (*Comments, error)
 		GROUP BY c.id, u.username
 	`
 
-	rows := r.db.QueryRow(queryStatement, commentId)	
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows := r.db.QueryRowContext(ctx, queryStatement, commentId)	
 
 	var comment Comments
 	err := rows.Scan(
@@ -190,7 +177,9 @@ func (r *SQLCommentsRepository) UpdateComment(comment *Comments) error {
 		WHERE id = $2
 	`
 
-	_, err := r.db.Exec(queryStatement, comment.Body, comment.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	_, err := r.db.ExecContext(ctx, queryStatement, comment.Body, comment.ID)
 	if err != nil {
 		return err
 	}
@@ -203,7 +192,11 @@ func (r *SQLCommentsRepository) DeleteComment(commentId int) error {
 		DELETE FROM comments
 		WHERE id = $1
 	`
-	rows, err := r.db.Exec(queryStatement, commentId)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.ExecContext(ctx, queryStatement, commentId)
 	if err != nil {
 		return err
 	}
@@ -220,10 +213,10 @@ func (r *SQLCommentsRepository) DeleteComment(commentId int) error {
 	return  nil
 }
 
-func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter Filter) ([]Comments, MetaData, error) {
+func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter helpers.Filter) ([]Comments, helpers.MetaData, error) {
 	err := filter.Validate()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -257,9 +250,12 @@ func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter Filter) 
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -272,7 +268,7 @@ func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter Filter) 
 			&comment.ParentId, &comment.CreatedAt, &comment.Author,
 		)
 		if err != nil {
-			return nil, MetaData{}, err
+			return nil, helpers.MetaData{}, err
 		}
 		comment.TotalRecords = totalRecords
 		comments = append(comments, comment)
@@ -280,14 +276,14 @@ func (r *SQLCommentsRepository) GetNestedComments(commentId int, filter Filter) 
 
 	err = rows.Err()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	if len(comments) == 0 {
-		return []Comments{}, MetaData{}, nil
+		return []Comments{}, helpers.MetaData{}, nil
 	}
 
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return comments, meta, nil
 }

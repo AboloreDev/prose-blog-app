@@ -11,19 +11,19 @@ import (
 
 type FetchedPostData struct {
 	Posts []posts.PostDetails
-	MetaData posts.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
 type FetchedCommunityPostData struct {
 	CommunityPosts []posts.PostDetails
-	MetaData posts.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
 type FetchedUserPostData struct {
 	UserPosts []posts.PostDetails
-	MetaData posts.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
@@ -162,30 +162,58 @@ func (app *Application) CreatePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) Homepage(w http.ResponseWriter, r *http.Request) {
-
-	filter := posts.Filter{
-		Page: app.ReadWithInt(r, "page", 1),
+	filter := helpers.Filter{
+		Page:     app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
-		Query: r.URL.Query().Get("query"),
-		OrderBy: r.URL.Query().Get("order_by"),
+		Query:    r.URL.Query().Get("query"),
+		OrderBy:  r.URL.Query().Get("order_by"),
 	}
 
+	// check if user_id query param exists
+	userIdStr := r.URL.Query().Get("user_id")
+	if userIdStr != "" {
+		userID, err := strconv.Atoi(userIdStr)
+		if err != nil {
+			http.Error(w, "Invalid user_id", http.StatusBadRequest)
+			return
+		}
+
+		userPosts, metadata, err := app.postRepo.GetUserPosts(userID, filter)
+		if err != nil {
+			app.errorLog.Println(err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
+
+		helpers.WriteJSON(w, http.StatusOK, &FetchedPostData{
+			Posts:    userPosts,
+			MetaData: metadata,
+			Next:     next,
+			Prev:     prev,
+		})
+		return
+	}
+
+	// default — get all posts
 	allPosts, metadata, err := app.postRepo.GetAllPost(filter)
 	if err != nil {
 		app.errorLog.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+
 	app.infoLog.Printf("\nMetadata: %+v\n", metadata)
-	
+
 	next, prev := helpers.BuildPostsPaginationURLs(filter, metadata)
 
 	helpers.WriteJSON(w, http.StatusOK, &FetchedPostData{
-		Posts: allPosts,
+		Posts:    allPosts,
 		MetaData: metadata,
-		Next: next, 
-		Prev: prev,
-	})	
+		Next:     next,
+		Prev:     prev,
+	})
 }
 
 func (app *Application) GetSinglePost(w http.ResponseWriter, r *http.Request) {
@@ -202,11 +230,12 @@ func (app *Application) GetSinglePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helpers.WriteJSON(w, http.StatusOK, post)
-
 	go func (){
 		app.postRepo.IncrementViewCount(id)
 	}()
+	
+	helpers.WriteJSON(w, http.StatusOK, post)
+
 }
 
 func (app *Application) DeletePost(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +282,7 @@ func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -282,7 +311,7 @@ func (app *Application) GetPostByCommunity(w http.ResponseWriter, r *http.Reques
 func (app *Application) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -311,6 +340,8 @@ func (app *Application) GetUserPosts(w http.ResponseWriter, r *http.Request) {
 func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
+	duration := 60 * time.Minute
+
 	postId, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid Post Id", http.StatusBadRequest)
@@ -337,6 +368,13 @@ func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if time.Since(post.CreatedAt) > duration {
+			app.errorLog.Printf("Unable to edit %v", err)
+			http.Error(w, "You can't edit a post after 1 hour", http.StatusBadRequest)
+			return
+		}
+
+
 	imageUrl := post.Image_url
     file, _, err := r.FormFile("image")
     if err == nil {
@@ -356,12 +394,14 @@ func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 		body = post.Body
 	}
 
-	err = app.postRepo.UpdatePost(&posts.Post{ID: post.ID, Title: title, Body: body, Image_url: imageUrl})
+	err = app.postRepo.UpdatePost(&posts.Post{ID: post.ID, Title: title, Body: body, Image_url: imageUrl,})
 	if err != nil {
 		app.errorLog.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+
+	
 
 	helpers.WriteJSON(w, http.StatusOK, UpdatePostResponse{
 		Message: "Post Updated Successfully",
@@ -371,7 +411,7 @@ func (app *Application) UpdateAPost(w http.ResponseWriter, r *http.Request) {
 func (app *Application) GetUserPostsDraft(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -399,7 +439,7 @@ func (app *Application) GetUserPostsDraft(w http.ResponseWriter, r *http.Request
 func (app *Application) GetUserScheduledPosts(w http.ResponseWriter, r *http.Request) {
 	userId := r.Context().Value(middleware.UserID).(int)
 
-	filter := posts.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -432,4 +472,54 @@ func (app *Application) GetAllScheduledPosts(w http.ResponseWriter, r *http.Requ
 	}
 
 	helpers.WriteJSON(w, http.StatusOK, allScheduledPosts)	
+}
+
+func (app *Application) PublishDraftPost(w http.ResponseWriter, r *http.Request) {
+	UserID := r.Context().Value(middleware.UserID).(int)
+
+	postId, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "Invalid Post Id", http.StatusBadRequest)
+		return
+	}
+
+	post, err := app.postRepo.GetPostById(postId)
+	if err != nil {
+		http.Error(w, "Post not found", http.StatusBadRequest)
+		return
+	}
+
+	if post.UserID != UserID {
+		if err != nil {
+		http.Error(w, "Unauthorised", http.StatusUnauthorized)
+		return
+		}
+	}
+
+	if post.Status == "draft"{
+		post.Status = "published"
+	}
+
+	err = app.postRepo.PublishPost(postId)
+	if err != nil {
+		http.Error(w, "Failed to publish post", http.StatusBadRequest)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, post)
+}
+
+func (app *Application) GetTrendingPosts(w http.ResponseWriter, r *http.Request) {
+    limit := app.ReadWithInt(r, "limit", 20)
+
+    posts, err := app.postRepo.GetTrendingPosts(limit)
+    if err != nil {
+        app.errorLog.Println(err)
+        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+        return
+    }
+
+    helpers.WriteJSON(w, http.StatusOK, map[string]interface{}{
+        "posts": posts,
+    })
 }

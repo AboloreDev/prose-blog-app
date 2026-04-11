@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -42,7 +43,10 @@ func (r *SQLAuthRepository) SaveRefreshToken(userId int, token string, expiresAt
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
 
-	_, err = stmt.Exec(userId, tokenHash, expiresAt)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err = stmt.ExecContext(ctx, userId, tokenHash, expiresAt)
 	if err != nil {
 		return  err
 	}
@@ -59,7 +63,11 @@ func (r *SQLAuthRepository) GetRefreshToken(token string) (*RefreshToken, error)
 	WHERE token_hash = $1
 	`	
 
-	rows := r.db.QueryRow(queryStatement, tokenHash)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	rows := r.db.QueryRowContext(ctx, queryStatement, tokenHash)
+
+
 
 	var tokens RefreshToken 
 	err := rows.Scan(&tokens.ID, &tokens.UserId, &tokens.ExpiresAt)
@@ -82,7 +90,10 @@ func (r *SQLAuthRepository) DeleteRefreshToken(token string) error {
 		DELETE FROM refresh_tokens 
 		WHERE token_hash = $1`
 
-	rows, err := r.db.Exec(statement, tokenHash)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.ExecContext(ctx, statement, tokenHash)
 	if err != nil {
 		return  err
 	}
@@ -104,7 +115,10 @@ func (r *SQLAuthRepository) DeleteAllToken(userId int) error {
 		DELETE FROM refresh_tokens 
 		WHERE user_id = $1`
 
-	rows, err := r.db.Exec(statement, userId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.ExecContext(ctx, statement, userId)
 	if err != nil {
 		return  err
 	}
@@ -126,8 +140,11 @@ func (r *SQLAuthRepository) DeleteExpiredTokens() error {
 	statement := `
 		DELETE FROM refresh_tokens 
 		WHERE expires_at < NOW()`
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
 
-	_, err := r.db.Exec(statement)
+	_, err := r.db.ExecContext(ctx, statement)
 	if err != nil {
 		return err
 	}

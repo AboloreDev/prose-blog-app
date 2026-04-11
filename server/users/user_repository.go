@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,6 +20,7 @@ type UserRepository interface {
 	UpdateUser(user *User) error
 	DeleteUser(id int) error
 	Authenticate(email, password string) (int, error)
+	UpdateKarmaPoints(userID int, Delta int) error
 }
 
 type SQLUserRepository struct {
@@ -72,7 +74,11 @@ func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
 	FROM users AS u INNER JOIN profiles AS p ON u.id = p.user_id
 	WHERE u.id = $1
 	`
-	rows := r.db.QueryRow(queryStatement, id)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	
+	rows := r.db.QueryRowContext(ctx, queryStatement, id)
 
 	var user User
 	err :=  rows.Scan(
@@ -88,11 +94,13 @@ func (r *SQLUserRepository) GetUserById(id int) (*User, error) {
 	return &user, nil
 }
 
-
 func (r *SQLUserRepository) GetAllUsers() ([]User, error) {
 	queryStatement := `SELECT id, username, email, created_at FROM users`
 
-	rows, err := r.db.Query(queryStatement)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement)
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +123,16 @@ func (r *SQLUserRepository) GetAllUsers() ([]User, error) {
 	return  users, nil
 }
 
-
 func (r *SQLUserRepository) GetUserByEmail(email string) (*User, error) {
 	queryStatement := `SELECT
 	u.id, u.username, u.email, u.password, u.created_at, p.bio, p.avatar_url, p.karma
 	FROM users AS u INNER JOIN profiles AS p 
 	ON u.id = p.user_id WHERE u.email = $1`
 
-	rows := r.db.QueryRow(queryStatement, email)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows := r.db.QueryRowContext(ctx, queryStatement, email)
 	var user User 
 	err := rows.Scan(
 		&user.ID, &user.Username, &user.Email, 
@@ -205,11 +215,13 @@ func (r *SQLUserRepository) UpdateUser(user *User) error {
 	return nil
 }
 
-
 func (r *SQLUserRepository) DeleteUser(id int) error {
 	deleteStatement := `DELETE FROM users WHERE id = $1`
 
-	rows, err := r.db.Exec(deleteStatement, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.ExecContext(ctx, deleteStatement, id)
 	if err != nil {
 		return err
 	}
@@ -226,3 +238,18 @@ func (r *SQLUserRepository) DeleteUser(id int) error {
 	return  nil
 }
 
+
+func (r *SQLUserRepository) UpdateKarmaPoints(userID int, Delta int) error {
+    queryStatement := `
+        UPDATE profiles SET karma = karma + $1
+        WHERE user_id = $2
+    `
+    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+    defer cancel()
+
+    _, err := r.db.ExecContext(ctx, queryStatement, Delta, userID)
+    if err != nil {
+        return err
+    }
+    return nil
+}

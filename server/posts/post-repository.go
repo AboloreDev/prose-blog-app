@@ -1,10 +1,11 @@
 package posts
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
+	"prose-blog/helpers"
 	"strings"
 	"time"
 )
@@ -14,46 +15,20 @@ var ErrDuplicatePostTitle = errors.New("Duplicate Post Title")
 var ErrInvalidPageRange = errors.New("invalid page range: 1 to 100 max")
 
 
-func (f *Filter) Validate() error {
-	if f.PageSize <= 0 || f.PageSize >= 100 {
-		return ErrInvalidPageRange
-	}
-	return nil
-}
-
-func calculateMetaData(totalRecords, page, pageSize int) MetaData {
-	meta := MetaData{
-		CurrentPage:  page,
-		PageSize:     pageSize,
-		FirstPage:    1,
-		LastPage:     int(math.Ceil(float64(totalRecords) / float64(pageSize))),
-		TotalRecords: totalRecords,
-	}
-	meta.NextPage = meta.CurrentPage + 1
-	meta.PreviousPage = meta.CurrentPage - 1
-	if meta.CurrentPage <= meta.FirstPage {
-		meta.PreviousPage = 0
-	}
-	if meta.CurrentPage >= meta.LastPage {
-    meta.NextPage = 0
-	}
-
-	return meta
-}
-
 type PostRepository interface {
 	CreatePost(userId int, title string, body string, image_url string, communityId int, status string, publishAt *time.Time) (int, error)
 	GetPostById(id int) (*PostDetails, error)
-	GetAllPost(filter Filter) ([]PostDetails, MetaData, error)
-	GetPostByCommunity(communityId int, filter Filter) ([]PostDetails, MetaData, error)
-	GetUserPosts(userId int, filter Filter) ([]PostDetails, MetaData, error)
+	GetAllPost(filter helpers.Filter) ([]PostDetails, helpers.MetaData, error)
+	GetPostByCommunity(communityId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error)
+	GetUserPosts(userId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error)
 	DeletePost(id int) error
 	UpdatePost(post *Post) error
-	GetUserPostDrafts(userId int, filter Filter) ([]PostDetails, MetaData, error)
-	GetUserScheduledPosts(userId int, filter Filter) ([]PostDetails, MetaData, error)
+	GetUserPostDrafts(userId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error)
+	GetUserScheduledPosts(userId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error)
 	PublishPost(postID int) error
 	IncrementViewCount(postId int) error
 	GetScheduledPosts() ([]PostDetails, error)
+	GetTrendingPosts(limit int) ([]PostDetails, error)
 }
 
 type SQLPostRepository struct{
@@ -72,7 +47,11 @@ func (r *SQLPostRepository) CreatePost(userId int, title string, body string, im
 		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
 	`
 	var postId int
-	row := r.db.QueryRow(statement, userId, title, body, image_url, communityId, status, publishAt)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	
+	row := r.db.QueryRowContext(ctx, statement, userId, title, body, image_url, communityId, status, publishAt)
 
 	err := row.Scan(&postId)
 	if err != nil {
@@ -98,7 +77,11 @@ func (r *SQLPostRepository) GetPostById(id int) (*PostDetails, error) {
 		WHERE p.id = $1
 		GROUP BY p.id, u.username, c.name
 	`
-	rows := r.db.QueryRow(queryStatement, id)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows := r.db.QueryRowContext(ctx, queryStatement, id)
 
 	var postDetails PostDetails
 	err := rows.Scan(
@@ -127,15 +110,15 @@ func (r *SQLPostRepository) GetPostById(id int) (*PostDetails, error) {
 	return &postDetails, nil
 }
 
-func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, error) {
+func (r *SQLPostRepository) GetAllPost(filter helpers.Filter) ([]PostDetails, helpers.MetaData, error) {
 	err := filter.Validate()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
 	SELECT COUNT(*) OVER() AS total_records,
-	p.id, p.user_id, p.title, p.body, p.created_at, p.image_url, p.view_count,
+	p.id, p.user_id, p.title, p.body, p.created_at, p.image_url, p.view_count, p.community_id,
 	u.username AS author, com.name AS community_name,
 	COUNT(DISTINCT v.user_id) AS vote_count,
 	COUNT(DISTINCT c.id) AS comment_count
@@ -168,9 +151,12 @@ func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, 
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+	
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -180,31 +166,31 @@ func (r *SQLPostRepository) GetAllPost(filter Filter) ([]PostDetails, MetaData, 
 		var post PostDetails
 		err := rows.Scan(
 			&totalRecords, &post.ID, &post.UserID, &post.Title, &post.Body, &post.CreatedAt, &post.Image_url,
-			&post.ViewCount, &post.Author, &post.CommunityName, &post.VotesCount, &post.CommentCount)
+			&post.ViewCount, &post.CommunityID, &post.Author, &post.CommunityName, &post.VotesCount, &post.CommentCount)
 		if err != nil {
-			return nil, MetaData{}, err
+			return nil, helpers.MetaData{}, err
 		}
 		post.TotalRecords = totalRecords
 		posts = append(posts, post)
 	}
 	err = rows.Err()
 	if err != nil {
-    return nil, MetaData{}, err
+    return nil, helpers.MetaData{}, err
 	}
 
 	if len(posts) == 0 {
-		return []PostDetails{}, MetaData{}, nil
+		return []PostDetails{}, helpers.MetaData{}, nil
 	}
 
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return posts, meta, nil
 }
 
-func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) ([]PostDetails, MetaData, error) {
+func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error) {
 	err := filter.Validate()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -244,9 +230,12 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-    return nil, MetaData{}, err
+    return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -260,7 +249,7 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
 			&post.CommentCount,
 		)
 		if err != nil {
-			return nil, MetaData{}, err
+			return nil, helpers.MetaData{}, err
 		}
 		post.TotalRecords = totalRecords
 		posts = append(posts, post)
@@ -268,20 +257,20 @@ func (r *SQLPostRepository) GetPostByCommunity(communityId int, filter Filter) (
 	}
 	err = rows.Err()
 	if err != nil {
-    return nil, MetaData{}, err
+    return nil, helpers.MetaData{}, err
 	}
 	if len(posts) == 0 {
-		return []PostDetails{}, MetaData{}, nil
+		return []PostDetails{}, helpers.MetaData{}, nil
 	}
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return posts, meta, nil
 }
 
-func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetails, MetaData, error) {
+func (r *SQLPostRepository) GetUserPosts(userId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error) {
 	err := filter.Validate()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -320,9 +309,12 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-    return nil, MetaData{}, err
+    return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -337,7 +329,7 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 		)
 
 		if err != nil {
-			return nil, MetaData{}, err
+			return nil, helpers.MetaData{}, err
 		}
 		post.TotalRecords = totalRecords
 		posts = append(posts, post)
@@ -345,12 +337,12 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 
 	err = rows.Err()
 	if err != nil {
-    return nil, MetaData{}, err
+    return nil, helpers.MetaData{}, err
 	}
 	if len(posts) == 0 {
-		return []PostDetails{}, MetaData{}, nil
+		return []PostDetails{}, helpers.MetaData{}, nil
 	}
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return posts, meta, nil
 
@@ -359,7 +351,10 @@ func (r *SQLPostRepository) GetUserPosts(userId int, filter Filter) ([]PostDetai
 func (r *SQLPostRepository) DeletePost(id int) error {
     statement := `DELETE FROM posts WHERE id = $1`
 
-    result, err := r.db.Exec(statement, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+    result, err := r.db.ExecContext(ctx, statement, id)
     if err != nil {
         return err
     }
@@ -382,7 +377,10 @@ func (r *SQLPostRepository) UpdatePost(post *Post) error {
 		WHERE id = $4
 	`
 
-	_, err := r.db.Exec(queryStatement, post.Title, post.Body, post.Image_url, post.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err := r.db.ExecContext(ctx, queryStatement, post.Title, post.Body, post.Image_url, post.ID)
 	if err != nil {
 		return err
 	}
@@ -390,10 +388,10 @@ func (r *SQLPostRepository) UpdatePost(post *Post) error {
 	return nil
 }
 
-func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]PostDetails, MetaData, error) {
+func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error) {
 	err := filter.Validate() 
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -428,9 +426,12 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -444,7 +445,7 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 			&post.Status, &post.Author, &post.CommunityName)
 
 		if err != nil {
-			return  nil, MetaData{}, err
+			return  nil, helpers.MetaData{}, err
 		}
 
 		post.TotalRecords = totalRecords
@@ -453,21 +454,22 @@ func (r *SQLPostRepository) GetUserPostDrafts(userId int, filter Filter) ([]Post
 
 	err = rows.Err()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	if len(posts) == 0 {
-		return []PostDetails{}, MetaData{}, nil
+		return []PostDetails{}, helpers.MetaData{}, nil
 	}
 
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return posts, meta, nil
 }
-func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]PostDetails, MetaData, error) {
+
+func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter helpers.Filter) ([]PostDetails, helpers.MetaData, error) {
 	err := filter.Validate() 
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	queryStatement := `
@@ -503,9 +505,12 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 	queryStatement += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	args = append(args, filter.PageSize, offset)
 
-	rows, err := r.db.Query(queryStatement, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	rows, err := r.db.QueryContext(ctx, queryStatement, args...)
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 	defer rows.Close()
 
@@ -519,7 +524,7 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 			&post.Status, &post.PublishAt, &post.Author, &post.CommunityName)
 
 		if err != nil {
-			return  nil, MetaData{}, err
+			return  nil, helpers.MetaData{}, err
 		}
 
 		post.TotalRecords = totalRecords
@@ -528,14 +533,14 @@ func (r *SQLPostRepository) GetUserScheduledPosts(userId int, filter Filter) ([]
 
 	err = rows.Err()
 	if err != nil {
-		return nil, MetaData{}, err
+		return nil, helpers.MetaData{}, err
 	}
 
 	if len(posts) == 0 {
-		return []PostDetails{}, MetaData{}, nil
+		return []PostDetails{}, helpers.MetaData{}, nil
 	}
 
-	meta := calculateMetaData(totalRecords, filter.Page, filter.PageSize)
+	meta := helpers.CalculateMetaData(totalRecords, filter.Page, filter.PageSize)
 
 	return posts, meta, nil
 }
@@ -546,7 +551,10 @@ func(r *SQLPostRepository) PublishPost(postID int) error {
 		WHERE id = $1
 	`
 
-	_, err := r.db.Exec(queryStatement, postID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err := r.db.ExecContext(ctx, queryStatement, postID)
 	if err != nil {
 		return err
 	}
@@ -559,7 +567,11 @@ func (r *SQLPostRepository) IncrementViewCount(postId int) error{
 		UPDATE posts SET view_count = view_count + 1
 		WHERE id = $1
 	`
-	_, err := r.db.Exec(queryStatement, postId)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	_, err := r.db.ExecContext(ctx, queryStatement, postId)
 	if err != nil {
 		return err
 	}
@@ -575,7 +587,10 @@ func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
         AND publish_at > NOW()
     `
 
-    rows, err := r.db.Query(statement)
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+    rows, err := r.db.QueryContext(ctx, statement)
     if err != nil {
         return nil, err
     }
@@ -603,4 +618,59 @@ func (r *SQLPostRepository) GetScheduledPosts() ([]PostDetails, error) {
     }
 
     return scheduledPosts, nil
+}
+
+func (r *SQLPostRepository) GetTrendingPosts(limit int) ([]PostDetails, error) {
+    statement := `
+        SELECT 
+            p.id, p.user_id, p.community_id, p.title, p.body,
+            p.image_url, p.status, p.view_count, p.created_at, p.updated_at,
+            u.username AS author,
+            c.name AS community_name,
+            COUNT(DISTINCT v.user_id) AS votes_count,
+            COUNT(DISTINCT cm.id) AS comment_count,
+            (COUNT(DISTINCT v.user_id) + (COUNT(DISTINCT cm.id) * 2) + (p.view_count * 0.1)) AS score
+        FROM posts AS p
+        INNER JOIN users AS u ON p.user_id = u.id
+        INNER JOIN communities AS c ON p.community_id = c.id
+        LEFT JOIN votes AS v ON p.id = v.post_id
+        LEFT JOIN comments AS cm ON p.id = cm.post_id
+        WHERE p.status = 'published'
+        AND p.created_at > NOW() - INTERVAL '48 hours'
+        GROUP BY p.id, u.username, c.name
+        ORDER BY score DESC
+        LIMIT $1
+    `
+
+    rows, err := r.db.Query(statement, limit)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var posts []PostDetails
+    for rows.Next() {
+        var post PostDetails
+        var score float64
+        err := rows.Scan(
+            &post.ID, &post.UserID, &post.CommunityID,
+            &post.Title, &post.Body, &post.Image_url,
+            &post.Status, &post.ViewCount,
+            &post.CreatedAt, &post.UpdatedAt,
+            &post.Author, &post.CommunityName,
+            &post.VotesCount, &post.CommentCount,
+            &score,
+        )
+        if err != nil {
+            return nil, err
+        }
+        posts = append(posts, post)
+    }
+
+    err = rows.Err()
+    if err != nil {
+        return nil, err
+    }
+
+    return posts, nil
 }

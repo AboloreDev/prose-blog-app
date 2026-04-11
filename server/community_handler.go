@@ -28,7 +28,7 @@ type UpdateCommunityResponse struct {
 
 type FetchedCommunitiesData struct {
 	Communities []community.Community
-	MetaData community.MetaData
+	MetaData helpers.MetaData
 	Next string
 	Prev string
 }
@@ -46,7 +46,16 @@ func (app *Application) CreateCommunity(w http.ResponseWriter, r *http.Request) 
 	name := r.FormValue("name")
     slug := r.FormValue("slug")
     description := r.FormValue("description")
-	
+	visibility := r.FormValue("visibility")
+
+	if visibility == "" {
+		visibility = "public"
+	}
+
+	if visibility == "private" {
+		visibility = "private"
+	}
+
 	if name == "" || slug == "" || description == "" {
         http.Error(w, "title, body and community_id are required", http.StatusBadRequest)
         return
@@ -64,7 +73,7 @@ func (app *Application) CreateCommunity(w http.ResponseWriter, r *http.Request) 
         }
     }
 
-	communityId, err := app.commRepo.CreateCommunity(name, slug, description, bannerUrl, UserId)
+	communityId, err := app.commRepo.CreateCommunity(name, slug, description, bannerUrl, visibility, UserId)
 	if err != nil {
 		app.errorLog.Printf("failed to create community: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -77,6 +86,7 @@ func (app *Application) CreateCommunity(w http.ResponseWriter, r *http.Request) 
         "name":        name,
         "slug":         slug,
         "image":    bannerUrl,
+		"visibility": visibility,
         "created_by":    UserId,
 	})
 }
@@ -102,7 +112,7 @@ func (app *Application) GetCommunityById(w http.ResponseWriter, r *http.Request)
 
 func (app *Application) GetAllCommunities(w http.ResponseWriter, r *http.Request) {
 
-	filter := community.Filter{
+	filter := helpers.Filter{
 		Page: app.ReadWithInt(r, "page", 1),
 		PageSize: app.ReadWithInt(r, "page_size", 50),
 		Query: r.URL.Query().Get("query"),
@@ -218,6 +228,7 @@ func (app *Application) UpdateCommunity(w http.ResponseWriter, r *http.Request) 
 	name := r.FormValue("name")
     slug := r.FormValue("slug")
     description := r.FormValue("description")
+	visibility := r.FormValue("visibility")
 
 	comm, err := app.commRepo.GetCommunityById(communityId)
 	if err != nil {
@@ -253,12 +264,21 @@ func (app *Application) UpdateCommunity(w http.ResponseWriter, r *http.Request) 
         description = comm.Description
     }
 
+	if visibility == "" {
+		visibility = comm.Visibility
+	}
+
+	if visibility == "private" {
+		visibility = "private"
+	}
+
     err = app.commRepo.UpdateACommunity(&community.Community{
         ID:          comm.ID,
         Name:        name,
         Slug:        slug,
         Description: description,
         Banner:      bannerUrl,
+		Visibility:  visibility,
     })
 	
 	if err != nil {
@@ -287,4 +307,18 @@ func (app *Application) GetAllCommunityMembers(w http.ResponseWriter, r *http.Re
 	
 
 	helpers.WriteJSON(w, http.StatusOK, allMembers)	
+}
+
+func (app *Application) GetUserCommunities(w http.ResponseWriter, r *http.Request) {
+	userId := r.Context().Value(middleware.UserID).(int)
+
+	userCommunity, err := app.commRepo.GetUserCommunities(userId)
+	if err != nil {
+		app.errorLog.Printf("Unauthorised: %v", err)
+		http.Error(w, "UnAuthorised", http.StatusUnauthorized)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, userCommunity)	
+
 }
