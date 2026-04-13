@@ -222,11 +222,11 @@ const Register = () => {
           <Button
             type="submit"
             disabled={isLoading || !isValid}
-            className="w-full bg-orange-500 text-white hover:bg-orange-600 font-medium h-11 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-lg shadow-orange-200"
+            className="w-full bg-white text-black font-medium h-11 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
           >
             {isLoading ? (
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4 h-4 rounded-full animate-spin" />
                 <span>Creating account...</span>
               </div>
             ) : (
